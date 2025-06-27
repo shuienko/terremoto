@@ -2,7 +2,7 @@ name: Test Docker Build
 
 on:
   pull_request:
-    branches: [ main, master ]
+    branches: [ main ]
 
 jobs:
   test-build:
