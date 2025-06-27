@@ -1,0 +1,36 @@
+name: Test Docker Build
+
+on:
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  test-build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Test Docker build for ARMv7
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        platforms: linux/arm/v7
+        push: false
+        tags: terremoto:test
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+    - name: Test Docker build for AMD64
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        platforms: linux/amd64
+        push: false
+        tags: terremoto:test-amd64
+        cache-from: type=gha
+        cache-to: type=gha,mode=max

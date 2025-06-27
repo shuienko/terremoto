@@ -1,0 +1,50 @@
+# Git
+.git
+.gitignore
+
+# Documentation
+README.md
+LICENSE
+
+# Build artifacts
+terremoto
+terremoto-*
+*.exe
+
+# Logs
+*.log
+earthquake_alerts.log
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Test files
+test_*
+*_test.go
+
+# Temporary files
+*.tmp
+*.temp
+
+# GitHub Actions
+.github/
+
+# Docker
+Dockerfile
+.dockerignore
+docker-compose*.yml
+
+# Makefile
+Makefile 
