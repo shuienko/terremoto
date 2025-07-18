@@ -20,16 +20,45 @@ except ImportError:
     raise
 
 def display_text(text):
-    """Display text on M5Stack Core S3 screen"""
+    """Display text on M5Stack Core S3 screen with larger font and centered text"""
     print("Display:", text)
     
     try:
         M5.Lcd.clear()
+        
+        # Set larger font size
+        M5.Lcd.setTextSize(2)
+        
+        # Get screen dimensions (M5Stack Core S3: 320x240)
+        screen_width = 320
+        screen_height = 240
+        
         lines = text.split('\n')
-        y = 10
-        for line in lines[:10]:  # Max 10 lines
-            M5.Lcd.drawString(line, 5, y)
-            y += 20
+        max_lines = 8  # Reduced for larger font
+        
+        # Calculate total text height
+        line_height = 25  # Increased for larger font
+        total_text_height = min(len(lines), max_lines) * line_height
+        
+        # Start y position to center text vertically
+        start_y = (screen_height - total_text_height) // 2
+        
+        y = start_y
+        for line in lines[:max_lines]:
+            if line.strip():  # Only process non-empty lines
+                # Calculate x position to center text horizontally
+                # Use M5Stack's textWidth method for accurate centering
+                try:
+                    text_width = M5.Lcd.textWidth(line)
+                    x = max(0, (screen_width - text_width) // 2)
+                except:
+                    # Fallback to manual calculation if textWidth not available
+                    text_width = len(line) * 10
+                    x = max(0, (screen_width - text_width) // 2)
+                
+                M5.Lcd.drawString(line, x, y)
+            y += line_height
+            
     except Exception as e:
         print("LCD Error:", e)
 
@@ -182,13 +211,13 @@ def main():
         print("Init error:", e)
     
     # Show startup message
-    display_text("Terremoto Monitor\nM5Stack Core S3\nStarting...\nLat: {}\nLon: {}\nRadius: {}km".format(MONITOR_LATITUDE, MONITOR_LONGITUDE, MONITOR_RADIUS_KM))
+    display_text("TERREMOTO MONITOR\n\nStarting\n\nLat: {:.2f}\nLon: {:.2f}\nRadius: {}km".format(MONITOR_LATITUDE, MONITOR_LONGITUDE, MONITOR_RADIUS_KM))
     time.sleep(3)
     
     # Connect to WiFi
     wifi_connected = connect_wifi()
     if not wifi_connected:
-        display_text("WiFi connection failed!\nWill retry during\noperation...")
+        display_text("WIFI FAILED\n\nWill retry\nduring operation")
     
     try:
         while True:
@@ -196,10 +225,10 @@ def main():
             wlan = network.WLAN(network.STA_IF)
             if not wlan.isconnected():
                 print("WiFi disconnected, attempting to reconnect...")
-                display_text("WiFi disconnected\nReconnecting...")
+                display_text("WIFI LOST\n\nReconnecting...")
                 wifi_connected = connect_wifi()
                 if not wifi_connected:
-                    display_text("WiFi reconnection failed\nRetrying in {} minutes".format(CHECK_INTERVAL_MINUTES))
+                    display_text("WIFI FAILED\n\nRetrying in\n{} minutes".format(CHECK_INTERVAL_MINUTES))
                     time.sleep(CHECK_INTERVAL_MINUTES * 60)
                     continue
             
@@ -208,20 +237,19 @@ def main():
             timestamp = format_time()
             
             if total_found == -1:
-                message = "Connection error\nRetrying WiFi connection\nLast check: {}".format(timestamp)
+                message = "CONNECTION\nERROR\n\nRetrying WiFi\n\nLast check: {}".format(timestamp)
                 # Try to reconnect WiFi on connection error
                 connect_wifi()
             elif not earthquakes:
-                message = "No earthquakes in radius\nTotal (last {} min): {}\nLast check: {}".format(CHECK_INTERVAL_MINUTES, total_found, timestamp)
+                message = "ALL CLEAR\n\nNo earthquakes\nin {}km radius\n\nTotal: {}\nLast check: {}".format(MONITOR_RADIUS_KM, total_found, timestamp)
             else:
                 # Show biggest earthquake if more than one happened
                 strongest = max(earthquakes, key=lambda eq: eq['magnitude'])
-                message = "EARTHQUAKE ALERT!\nMag: {:.1f}\nPlace: {}...\nDistance: {:.1f}km\nTotal (last {} min): {}\nLast check: {}".format(
+                place_short = strongest['place'][:15]
+                message = "EARTHQUAKE!\n\nMag: {:.1f}\n{}\nDist: {:.0f}km\n\nLast check: {}".format(
                         strongest['magnitude'], 
-                        strongest['place'][:20], 
+                        place_short, 
                         strongest['distance'],
-                        CHECK_INTERVAL_MINUTES,
-                        total_found,
                         timestamp
                 )
             
@@ -234,9 +262,9 @@ def main():
             time.sleep(CHECK_INTERVAL_MINUTES * 60)
             
     except KeyboardInterrupt:
-        display_text("Stopping monitor...")
+        display_text("STOPPING\n\nMonitor halted")
     except Exception as e:
-        display_text("Error:\n{}".format(str(e)[:50]))
+        display_text("ERROR\n\n{}".format(str(e)[:30]))
 
 # Run the main function
 if __name__ == "__main__":
