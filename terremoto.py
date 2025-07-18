@@ -7,8 +7,9 @@ Fetches earthquake data from EMSC API and monitors for earthquakes within a spec
 import json
 import math
 import time
+import os
 from datetime import datetime, timedelta, timezone
-from typing import List, Tuple
+from typing import List, Tuple, Set
 from urllib.request import urlopen
 from urllib.parse import urlencode
 from urllib.error import URLError, HTTPError
@@ -24,6 +25,10 @@ class Earthquake:
         self.time = time
         self.place = place
         self.distance = distance
+    
+    def get_id(self) -> str:
+        """Generate unique identifier for earthquake"""
+        return f"{self.magnitude}_{self.latitude}_{self.longitude}_{self.time.isoformat()}"
 
 
 class EarthquakeMonitor:
@@ -34,6 +39,7 @@ class EarthquakeMonitor:
         self.latitude = 36.7506
         self.longitude = -3.8739
         self.radius_km = 400.0
+        self.shown_earthquakes_file = "shown_earthquakes.json"
         
         print(f"Initialized earthquake monitor for Nerja, Spain: {self.latitude:.4f}, {self.longitude:.4f}")
         print(f"Monitoring radius: {self.radius_km:.1f}km")
@@ -57,10 +63,28 @@ class EarthquakeMonitor:
         
         return c * earth_radius
     
+    def load_shown_earthquakes(self) -> Set[str]:
+        """Load previously shown earthquake IDs from file"""
+        try:
+            if os.path.exists(self.shown_earthquakes_file):
+                with open(self.shown_earthquakes_file, 'r') as f:
+                    return set(json.load(f))
+        except (json.JSONDecodeError, IOError):
+            pass
+        return set()
+    
+    def save_shown_earthquakes(self, shown_ids: Set[str]):
+        """Save shown earthquake IDs to file"""
+        try:
+            with open(self.shown_earthquakes_file, 'w') as f:
+                json.dump(list(shown_ids), f)
+        except IOError:
+            pass
+    
     def fetch_earthquakes(self) -> Tuple[List[Earthquake], int]:
-        """Fetch earthquakes from EMSC API for the last 24 hours"""
+        """Fetch earthquakes from EMSC API for the last hour"""
         end_time = datetime.now(timezone.utc)
-        start_time = end_time - timedelta(hours=24)
+        start_time = end_time - timedelta(hours=1)
         
         start_str = start_time.strftime("%Y-%m-%dT%H:%M:%S")
         end_str = end_time.strftime("%Y-%m-%dT%H:%M:%S")
@@ -157,7 +181,7 @@ class EarthquakeMonitor:
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
         if not earthquakes:
-            print(f"[{timestamp}] No earthquakes detected in your area in the last 24 hours. "
+            print(f"[{timestamp}] No earthquakes detected in your area in the last hour. "
                   f"Total earthquakes found worldwide: {total_found}")
             return
         
@@ -183,18 +207,32 @@ class EarthquakeMonitor:
     
     def run(self):
         """Main monitoring loop - checks every 5 minutes"""
-        print("Starting earthquake monitoring (checking every 5 minutes)...")
+        print("Starting earthquake monitoring (checking every 5 minutes for last hour earthquakes)...")
         print("Press Ctrl+C to stop")
         
         try:
             while True:
                 earthquakes, total_found = self.fetch_earthquakes()
                 
-                if earthquakes:
-                    self.print_earthquake_alert(earthquakes, total_found)
+                # Load previously shown earthquakes
+                shown_ids = self.load_shown_earthquakes()
+                
+                # Filter out already shown earthquakes
+                new_earthquakes = [eq for eq in earthquakes if eq.get_id() not in shown_ids]
+                
+                if new_earthquakes:
+                    self.print_earthquake_alert(new_earthquakes, total_found)
+                    
+                    # Save new earthquake IDs as shown
+                    new_ids = {eq.get_id() for eq in new_earthquakes}
+                    shown_ids.update(new_ids)
+                    self.save_shown_earthquakes(shown_ids)
                 else:
                     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                    print(f"[{timestamp}] No earthquakes in radius. Total worldwide: {total_found}")
+                    if earthquakes:
+                        print(f"[{timestamp}] No new earthquakes in radius. Total worldwide: {total_found}")
+                    else:
+                        print(f"[{timestamp}] No earthquakes in radius. Total worldwide: {total_found}")
                 
                 # Wait 5 minutes
                 time.sleep(300)
