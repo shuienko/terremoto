@@ -133,3 +133,6 @@ dmypy.json
 ehthumbs.db
 Thumbs.db
 shown_earthquakes.json
+
+# Configuration files containing sensitive data
+config.py
