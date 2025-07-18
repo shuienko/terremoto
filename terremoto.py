@@ -15,6 +15,14 @@ from urllib.parse import urlencode
 from urllib.error import URLError, HTTPError
 
 
+# Global configuration variables
+MONITOR_LATITUDE = 36.7506  # Nerja, Spain latitude
+MONITOR_LONGITUDE = -3.8739  # Nerja, Spain longitude
+MONITOR_RADIUS_KM = 400.0  # Monitoring radius in kilometers
+CHECK_INTERVAL_SECONDS = 30  # Check every 5 minutes (300 seconds)
+TIME_WINDOW_HOURS = 1  # Time window to check for earthquakes (in hours)
+
+
 class Earthquake:
     """Represents an earthquake event"""
     def __init__(self, magnitude: float, latitude: float, longitude: float, 
@@ -35,13 +43,13 @@ class EarthquakeMonitor:
     """Earthquake monitoring system"""
     
     def __init__(self):
-        # Nerja, Spain coordinates
-        self.latitude = 36.7506
-        self.longitude = -3.8739
-        self.radius_km = 400.0
+        # Use global configuration variables
+        self.latitude = MONITOR_LATITUDE
+        self.longitude = MONITOR_LONGITUDE
+        self.radius_km = MONITOR_RADIUS_KM
         self.shown_earthquakes_file = "shown_earthquakes.json"
         
-        print(f"Initialized earthquake monitor for Nerja, Spain: {self.latitude:.4f}, {self.longitude:.4f}")
+        print(f"Initialized earthquake monitor for coordinates: {self.latitude:.4f}, {self.longitude:.4f}")
         print(f"Monitoring radius: {self.radius_km:.1f}km")
     
     def haversine_distance(self, lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -81,10 +89,36 @@ class EarthquakeMonitor:
         except IOError:
             pass
     
+    def cleanup_old_earthquakes(self, shown_ids: Set[str]) -> Set[str]:
+        """Remove earthquake IDs older than TIME_WINDOW_HOURS"""
+        cutoff_time = datetime.now(timezone.utc) - timedelta(hours=TIME_WINDOW_HOURS)
+        cleaned_ids = set()
+        
+        for eq_id in shown_ids:
+            try:
+                # Extract timestamp from earthquake ID (format: magnitude_lat_lon_timestamp)
+                parts = eq_id.split('_')
+                if len(parts) >= 4:
+                    timestamp_str = '_'.join(parts[3:])  # Handle case where timestamp might contain underscores
+                    eq_time = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
+                    
+                    # Make sure eq_time is timezone-aware (assume UTC if naive)
+                    if eq_time.tzinfo is None:
+                        eq_time = eq_time.replace(tzinfo=timezone.utc)
+                    
+                    # Keep earthquakes that are within the time window
+                    if eq_time >= cutoff_time:
+                        cleaned_ids.add(eq_id)
+            except (ValueError, IndexError):
+                # Keep IDs that can't be parsed (to avoid data loss)
+                cleaned_ids.add(eq_id)
+        
+        return cleaned_ids
+    
     def fetch_earthquakes(self) -> Tuple[List[Earthquake], int]:
-        """Fetch earthquakes from EMSC API for the last hour"""
+        """Fetch earthquakes from EMSC API for the configured time window"""
         end_time = datetime.now(timezone.utc)
-        start_time = end_time - timedelta(hours=1)
+        start_time = end_time - timedelta(hours=TIME_WINDOW_HOURS)
         
         start_str = start_time.strftime("%Y-%m-%dT%H:%M:%S")
         end_str = end_time.strftime("%Y-%m-%dT%H:%M:%S")
@@ -181,33 +215,32 @@ class EarthquakeMonitor:
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
         if not earthquakes:
-            print(f"[{timestamp}] No earthquakes detected in your area in the last hour. "
+            time_window_text = f"{TIME_WINDOW_HOURS} hour" if TIME_WINDOW_HOURS == 1 else f"{TIME_WINDOW_HOURS} hours"
+            print(f"[{timestamp}] No earthquakes detected in your area in the last {time_window_text}. "
                   f"Total earthquakes found worldwide: {total_found}")
             return
         
         print(f"\n[{timestamp}] EARTHQUAKE ALERT!")
         print(f"Location: {self.latitude:.4f}, {self.longitude:.4f}")
         print(f"Radius: {self.radius_km:.1f}km")
-        print(f"Found {len(earthquakes)} earthquake(s) in your area (out of {total_found} total worldwide):")
+        time_window_text = f"{TIME_WINDOW_HOURS} hour" if TIME_WINDOW_HOURS == 1 else f"{TIME_WINDOW_HOURS} hours"
+        print(f"Found {len(earthquakes)} earthquake(s) in your area in the last {time_window_text} (out of {total_found} total worldwide):")
         print("-" * 60)
         
-        # Limit to 10 earthquakes for readability
-        display_earthquakes = earthquakes[:10]
-        
-        for i, eq in enumerate(display_earthquakes, 1):
+        # Show all earthquakes
+        for i, eq in enumerate(earthquakes, 1):
             print(f"{i}. Magnitude {eq.magnitude:.1f} - {eq.place}")
             print(f"   Time: {eq.time.strftime('%Y-%m-%d %H:%M:%S')} UTC")
             print(f"   Distance: {eq.distance:.1f}km")
             print()
         
-        if len(earthquakes) > 10:
-            print(f"... and {len(earthquakes) - 10} more earthquakes")
-        
         print("-" * 60)
     
     def run(self):
-        """Main monitoring loop - checks every 5 minutes"""
-        print("Starting earthquake monitoring (checking every 5 minutes for last hour earthquakes)...")
+        """Main monitoring loop - checks at configurable interval"""
+        interval_minutes = CHECK_INTERVAL_SECONDS // 60
+        time_window_text = f"{TIME_WINDOW_HOURS} hour" if TIME_WINDOW_HOURS == 1 else f"{TIME_WINDOW_HOURS} hours"
+        print(f"Starting earthquake monitoring (checking every {interval_minutes} minutes for last {time_window_text} earthquakes)...")
         print("Press Ctrl+C to stop")
         
         try:
@@ -216,6 +249,9 @@ class EarthquakeMonitor:
                 
                 # Load previously shown earthquakes
                 shown_ids = self.load_shown_earthquakes()
+                
+                # Clean up old earthquake IDs
+                shown_ids = self.cleanup_old_earthquakes(shown_ids)
                 
                 # Filter out already shown earthquakes
                 new_earthquakes = [eq for eq in earthquakes if eq.get_id() not in shown_ids]
@@ -226,7 +262,6 @@ class EarthquakeMonitor:
                     # Save new earthquake IDs as shown
                     new_ids = {eq.get_id() for eq in new_earthquakes}
                     shown_ids.update(new_ids)
-                    self.save_shown_earthquakes(shown_ids)
                 else:
                     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                     if earthquakes:
@@ -234,8 +269,11 @@ class EarthquakeMonitor:
                     else:
                         print(f"[{timestamp}] No earthquakes in radius. Total worldwide: {total_found}")
                 
-                # Wait 5 minutes
-                time.sleep(300)
+                # Always save the cleaned shown_ids (even if no new earthquakes)
+                self.save_shown_earthquakes(shown_ids)
+                
+                # Wait for configured interval
+                time.sleep(CHECK_INTERVAL_SECONDS)
                 
         except KeyboardInterrupt:
             print("\nStopping earthquake monitoring...")
