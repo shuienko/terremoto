@@ -15,9 +15,10 @@ TIMEZONE_OFFSET_HOURS = 2  # Central European Summer Time (Spain)
 # -- Display Configuration --
 SCREEN_WIDTH = 320
 SCREEN_HEIGHT = 240
-TEXT_SIZE = 3
-LINE_HEIGHT = 30
-MAX_LINES = 7
+TEXT_SIZE = 2  # Default text size multiplier (1, 2, 3...)
+LINE_HEIGHT = 20  # Line height in pixels for multi-line text
+MAX_LINES = 10  # Max lines to display to avoid screen overflow
+FONT = "DejaVu18"
 STARTUP_DISPLAY_DELAY = 5
 
 # -- Network & API Configuration --

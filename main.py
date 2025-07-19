@@ -27,6 +27,12 @@ except ImportError:
     print("Error: config.py not found. Please create config.py from config.template.py")
     raise
 
+# Import FONT from config with a fallback for backward compatibility
+try:
+    from config import FONT
+except ImportError:
+    FONT = None
+
 # -- Message Formats --
 MESSAGES = {
     "STARTUP": "TERREMOTO MONITOR\n\nStarting\n\nLat: {:.2f}\nLon: {:.2f}\nRadius: {}km",
@@ -50,8 +56,12 @@ def display_text(text):
     try:
         M5.Lcd.clear()
         
-        # Set font size from config
-        M5.Lcd.setTextSize(TEXT_SIZE)
+        # Set font from config if available, otherwise use legacy text size
+        if FONT and hasattr(M5.Lcd.FONTS, FONT):
+            M5.Lcd.setFont(getattr(M5.Lcd.FONTS, FONT))
+        else:
+            # Set font size from config
+            M5.Lcd.setTextSize(TEXT_SIZE)
         
         # Get screen dimensions from config
         screen_width = SCREEN_WIDTH
