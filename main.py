@@ -43,8 +43,8 @@ MESSAGES = {
     "TIME_SYNCED": "TIME SYNCED\n\n{}",
     "NTP_FAILED": "NTP FAILED\n\nWill use\nlast known time",
     "CONNECTION_ERROR": "CONNECTION\nERROR\n\nRetrying WiFi\n\nLast check: {}",
-    "ALL_CLEAR": "ALL CLEAR\n\nNo earthquakes\nin {}km radius\n\nTotal: {}\nLast check: {}",
-    "EARTHQUAKE": "EARTHQUAKE!\n\nMag: {:.1f}\n{}\nDist: {:.0f}km\n\nLast check: {}",
+    "ALL_CLEAR": "== ALL CLEAR ==\n\nNo earthquakes\nin {}km radius\n\nTotal in the world: {}\nLast check: {}",
+    "EARTHQUAKE": "!EARTHQUAKE!\n\nMag: {:.1f}\n{}\nDist: {:.0f}km\n\nLast check: {}",
     "STOPPING": "STOPPING\n\nMonitor halted",
     "RUNTIME_ERROR": "RUNTIME ERROR\n\n{}\n\nRestarting loop...",
 }
