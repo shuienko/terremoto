@@ -9,15 +9,39 @@ import gc
 import requests
 import M5
 import network
+import ntptime
 
 print("M5Stack Core S3 libraries loaded")
 
 # Import configuration
 try:
-    from config import WIFI_SSID, WIFI_PASSWORD, MONITOR_LATITUDE, MONITOR_LONGITUDE, TIMEZONE_OFFSET_HOURS, MONITOR_RADIUS_KM, CHECK_INTERVAL_MINUTES
+    from config import (
+        WIFI_SSID, WIFI_PASSWORD, MONITOR_LATITUDE, MONITOR_LONGITUDE, 
+        TIMEZONE_OFFSET_HOURS, MONITOR_RADIUS_KM, CHECK_INTERVAL_MINUTES,
+        SCREEN_WIDTH, SCREEN_HEIGHT, TEXT_SIZE, LINE_HEIGHT, MAX_LINES,
+        WIFI_MAX_RETRIES, WIFI_RETRY_DELAY, WIFI_MAX_WAIT, HTTP_TIMEOUT,
+        EMSC_BASE_URL, MIN_MAGNITUDE, EARTH_RADIUS_KM,
+        PLACE_NAME_MAX_LENGTH, ERROR_MESSAGE_MAX_LENGTH, STARTUP_DISPLAY_DELAY
+    )
 except ImportError:
     print("Error: config.py not found. Please create config.py from config.template.py")
     raise
+
+# -- Message Formats --
+MESSAGES = {
+    "STARTUP": "TERREMOTO MONITOR\n\nStarting\n\nLat: {:.2f}\nLon: {:.2f}\nRadius: {}km",
+    "WIFI_LOST": "WIFI LOST\n\nReconnecting...",
+    "WIFI_FAILED": "WIFI FAILED\n\nRetrying in\n{} minutes",
+    "WIFI_RETRY": "WIFI FAILED\n\nWill retry\nduring operation",
+    "SYNCING_TIME": "SYNCING TIME\n\nwith NTP...",
+    "TIME_SYNCED": "TIME SYNCED\n\n{}",
+    "NTP_FAILED": "NTP FAILED\n\nWill use\nlast known time",
+    "CONNECTION_ERROR": "CONNECTION\nERROR\n\nRetrying WiFi\n\nLast check: {}",
+    "ALL_CLEAR": "ALL CLEAR\n\nNo earthquakes\nin {}km radius\n\nTotal: {}\nLast check: {}",
+    "EARTHQUAKE": "EARTHQUAKE!\n\nMag: {:.1f}\n{}\nDist: {:.0f}km\n\nLast check: {}",
+    "STOPPING": "STOPPING\n\nMonitor halted",
+    "RUNTIME_ERROR": "RUNTIME ERROR\n\n{}\n\nRestarting loop...",
+}
 
 def display_text(text):
     """Display text on M5Stack Core S3 screen with larger font and centered text"""
@@ -26,18 +50,18 @@ def display_text(text):
     try:
         M5.Lcd.clear()
         
-        # Set larger font size
-        M5.Lcd.setTextSize(2)
+        # Set font size from config
+        M5.Lcd.setTextSize(TEXT_SIZE)
         
-        # Get screen dimensions (M5Stack Core S3: 320x240)
-        screen_width = 320
-        screen_height = 240
+        # Get screen dimensions from config
+        screen_width = SCREEN_WIDTH
+        screen_height = SCREEN_HEIGHT
         
         lines = text.split('\n')
-        max_lines = 8  # Reduced for larger font
+        max_lines = MAX_LINES
         
         # Calculate total text height
-        line_height = 25  # Increased for larger font
+        line_height = LINE_HEIGHT
         total_text_height = min(len(lines), max_lines) * line_height
         
         # Start y position to center text vertically
@@ -62,7 +86,7 @@ def display_text(text):
     except Exception as e:
         print("LCD Error:", e)
 
-def connect_wifi(max_retries=3, retry_delay=5):
+def connect_wifi(max_retries=WIFI_MAX_RETRIES, retry_delay=WIFI_RETRY_DELAY):
     """Connect to WiFi network with retry logic"""
     wlan = network.WLAN(network.STA_IF)
     wlan.active(True)
@@ -76,7 +100,7 @@ def connect_wifi(max_retries=3, retry_delay=5):
         wlan.connect(WIFI_SSID, WIFI_PASSWORD)
         
         # Wait for connection
-        max_wait = 10
+        max_wait = WIFI_MAX_WAIT
         while max_wait > 0:
             if wlan.isconnected():
                 print("Connected to WiFi")
@@ -97,7 +121,7 @@ def connect_wifi(max_retries=3, retry_delay=5):
 
 def haversine_distance(lat1, lon1, lat2, lon2):
     """Calculate distance between two points using Haversine formula"""
-    earth_radius = 6371  # Earth's radius in kilometers
+    earth_radius = EARTH_RADIUS_KM
     
     # Convert to radians
     lat1_rad = math.radians(lat1)
@@ -114,79 +138,93 @@ def haversine_distance(lat1, lon1, lat2, lon2):
     
     return c * earth_radius
 
+def build_api_url():
+    """Build EMSC API URL with time parameters"""
+    current_time = time.time()
+    start_time = current_time - (CHECK_INTERVAL_MINUTES * 60)
+    
+    start_tuple = time.localtime(start_time)
+    start_iso = "{:04d}-{:02d}-{:02d}T{:02d}:{:02d}:{:02d}".format(
+        start_tuple[0], start_tuple[1], start_tuple[2],
+        start_tuple[3], start_tuple[4], start_tuple[5]
+    )
+    
+    params = "?format=json&minmag={}&starttime={}".format(MIN_MAGNITUDE, start_iso)
+    return EMSC_BASE_URL + params
+
+def fetch_api_data(url):
+    """Make HTTP request to EMSC API and return JSON data"""
+    print("Fetching:", url)
+    response = requests.get(url, timeout=HTTP_TIMEOUT)
+    
+    if response.status_code != 200:
+        print("HTTP error:", response.status_code)
+        response.close()
+        return None
+    
+    data = response.json()
+    response.close()
+    return data
+
+def parse_earthquake_feature(feature):
+    """Parse a single earthquake feature from EMSC API response"""
+    properties = feature['properties']
+    geometry = feature['geometry']
+    
+    if len(geometry['coordinates']) < 2:
+        return None
+    
+    longitude = geometry['coordinates'][0]
+    latitude = geometry['coordinates'][1]
+    magnitude = properties.get('mag', 0.0)
+    place = properties.get('flynn_region', 'Unknown')
+    timestamp = properties.get('time', 0)
+    
+    distance = haversine_distance(
+        MONITOR_LATITUDE, MONITOR_LONGITUDE, latitude, longitude
+    )
+    
+    if distance <= MONITOR_RADIUS_KM:
+        return {
+            'magnitude': magnitude,
+            'place': place,
+            'distance': distance,
+            'latitude': latitude,
+            'longitude': longitude,
+            'timestamp': timestamp
+        }
+    
+    return None
+
+def parse_earthquakes_data(data):
+    """Parse earthquake data from EMSC API response"""
+    earthquakes = []
+    total_found = 0
+    
+    if 'features' in data:
+        total_found = len(data['features'])
+        
+        for feature in data['features']:
+            try:
+                earthquake = parse_earthquake_feature(feature)
+                if earthquake:
+                    earthquakes.append(earthquake)
+            except Exception as e:
+                print("Parse error:", e)
+                continue
+    
+    return earthquakes, total_found
+
 def fetch_earthquakes():
     """Fetch earthquake data from EMSC API"""
     try:
-        # Get current time (simplified - no timezone handling in MicroPython)
-        # Using seconds since epoch approximation
-        current_time = time.time()
-        start_time = current_time - (CHECK_INTERVAL_MINUTES * 60)
+        url = build_api_url()
+        data = fetch_api_data(url)
         
-        # Convert timestamps to ISO format for API
-        # EMSC API expects format: YYYY-MM-DDTHH:MM:SS
-        start_tuple = time.localtime(start_time)
-        start_iso = "{:04d}-{:02d}-{:02d}T{:02d}:{:02d}:{:02d}".format(
-            start_tuple[0], start_tuple[1], start_tuple[2],
-            start_tuple[3], start_tuple[4], start_tuple[5]
-        )
-        
-        base_url = "https://www.seismicportal.eu/fdsnws/event/1/query"
-        params = "?format=json&minmag=0&starttime={}".format(start_iso)
-        
-        url = base_url + params
-        print("Fetching:", url)
-        
-        response = requests.get(url, timeout=10)
-        
-        if response.status_code != 200:
-            print("HTTP error:", response.status_code)
-            response.close()
+        if data is None:
             return [], 0
         
-        data = response.json()
-        response.close()
-        
-        earthquakes = []
-        total_found = 0
-        
-        if 'features' in data:
-            total_found = len(data['features'])
-            
-            for feature in data['features']:
-                try:
-                    properties = feature['properties']
-                    geometry = feature['geometry']
-                    
-                    if len(geometry['coordinates']) < 2:
-                        continue
-                    
-                    longitude = geometry['coordinates'][0]
-                    latitude = geometry['coordinates'][1]
-                    magnitude = properties.get('mag', 0.0)
-                    place = properties.get('flynn_region', 'Unknown')
-                    timestamp = properties.get('time', 0)  # Get earthquake timestamp
-                    
-                    # Calculate distance
-                    distance = haversine_distance(
-                        MONITOR_LATITUDE, MONITOR_LONGITUDE, latitude, longitude
-                    )
-                    
-                    # Only include earthquakes within radius
-                    if distance <= MONITOR_RADIUS_KM:
-                        earthquakes.append({
-                            'magnitude': magnitude,
-                            'place': place,
-                            'distance': distance,
-                            'latitude': latitude,
-                            'longitude': longitude,
-                            'timestamp': timestamp
-                        })
-                        
-                except Exception as e:
-                    print("Parse error:", e)
-                    continue
-        
-        return earthquakes, total_found
+        return parse_earthquakes_data(data)
         
     except Exception as e:
         print("Fetch error:", e)
@@ -200,59 +238,95 @@ def format_time():
     t = time.gmtime(spain_time)
     return "{:02d}:{:02d}:{:02d}".format(t[3], t[4], t[5])
 
-def main():
-    """Main function"""
-    # Initialize display
+def sync_time_with_ntp():
+    """Synchronize device time with NTP server"""
+    print("Synchronizing time with NTP server...")
+    display_text(MESSAGES["SYNCING_TIME"])
+    try:
+        ntptime.settime()
+        print("Time synchronized successfully")
+        current_time_str = format_time()
+        display_text(MESSAGES["TIME_SYNCED"].format(current_time_str))
+        time.sleep(2)
+        return True
+    except Exception as e:
+        print("NTP Error:", e)
+        display_text(MESSAGES["NTP_FAILED"])
+        time.sleep(2)
+        return False
+
+def initialize_device():
+    """Initialize M5Stack Core S3 device"""
     try:
         M5.begin()
         M5.Lcd.clear()
         print("M5Stack Core S3 initialized")
+        return True
     except Exception as e:
         print("Init error:", e)
-    
-    # Show startup message
-    display_text("TERREMOTO MONITOR\n\nStarting\n\nLat: {:.2f}\nLon: {:.2f}\nRadius: {}km".format(MONITOR_LATITUDE, MONITOR_LONGITUDE, MONITOR_RADIUS_KM))
-    time.sleep(3)
-    
-    # Connect to WiFi
-    wifi_connected = connect_wifi()
-    if not wifi_connected:
-        display_text("WIFI FAILED\n\nWill retry\nduring operation")
-    
+        return False
+
+def show_startup_message():
+    """Display startup message with monitoring configuration"""
+    startup_msg = MESSAGES["STARTUP"].format(
+        MONITOR_LATITUDE, MONITOR_LONGITUDE, MONITOR_RADIUS_KM
+    )
+    display_text(startup_msg)
+    time.sleep(STARTUP_DISPLAY_DELAY)
+
+def ensure_wifi_connection():
+    """Ensure WiFi is connected, attempt reconnection if needed"""
+    wlan = network.WLAN(network.STA_IF)
+    if not wlan.isconnected():
+        print("WiFi disconnected, attempting to reconnect...")
+        display_text(MESSAGES["WIFI_LOST"])
+        wifi_connected = connect_wifi()
+        if not wifi_connected:
+            display_text(MESSAGES["WIFI_FAILED"].format(CHECK_INTERVAL_MINUTES))
+            time.sleep(CHECK_INTERVAL_MINUTES * 60)
+            return False
+        # If reconnected, sync time
+        sync_time_with_ntp()
+    return True
+
+def format_earthquake_message(earthquakes, total_found, timestamp):
+    """Format message based on earthquake data"""
+    if total_found == -1:
+        return MESSAGES["CONNECTION_ERROR"].format(timestamp)
+    elif not earthquakes:
+        return MESSAGES["ALL_CLEAR"].format(
+            MONITOR_RADIUS_KM, total_found, timestamp
+        )
+    else:
+        # Show biggest earthquake if more than one happened
+        strongest = max(earthquakes, key=lambda eq: eq['magnitude'])
+        place_short = strongest['place'][:PLACE_NAME_MAX_LENGTH]
+        return MESSAGES["EARTHQUAKE"].format(
+            strongest['magnitude'], 
+            place_short, 
+            strongest['distance'],
+            timestamp
+        )
+
+def monitoring_loop():
+    """Main monitoring loop"""
     try:
         while True:
-            # Check WiFi connection before fetching data
-            wlan = network.WLAN(network.STA_IF)
-            if not wlan.isconnected():
-                print("WiFi disconnected, attempting to reconnect...")
-                display_text("WIFI LOST\n\nReconnecting...")
-                wifi_connected = connect_wifi()
-                if not wifi_connected:
-                    display_text("WIFI FAILED\n\nRetrying in\n{} minutes".format(CHECK_INTERVAL_MINUTES))
-                    time.sleep(CHECK_INTERVAL_MINUTES * 60)
-                    continue
+            # Ensure WiFi connection
+            if not ensure_wifi_connection():
+                continue
             
             # Fetch earthquake data
             earthquakes, total_found = fetch_earthquakes()
             timestamp = format_time()
             
+            # Handle connection error by trying to reconnect WiFi
             if total_found == -1:
-                message = "CONNECTION\nERROR\n\nRetrying WiFi\n\nLast check: {}".format(timestamp)
-                # Try to reconnect WiFi on connection error
-                connect_wifi()
-            elif not earthquakes:
-                message = "ALL CLEAR\n\nNo earthquakes\nin {}km radius\n\nTotal: {}\nLast check: {}".format(MONITOR_RADIUS_KM, total_found, timestamp)
-            else:
-                # Show biggest earthquake if more than one happened
-                strongest = max(earthquakes, key=lambda eq: eq['magnitude'])
-                place_short = strongest['place'][:15]
-                message = "EARTHQUAKE!\n\nMag: {:.1f}\n{}\nDist: {:.0f}km\n\nLast check: {}".format(
-                        strongest['magnitude'], 
-                        place_short, 
-                        strongest['distance'],
-                        timestamp
-                )
+                # The ensure_wifi_connection() at the start of the loop will handle this
+                pass
             
+            # Format and display message
+            message = format_earthquake_message(earthquakes, total_found, timestamp)
             display_text(message)
             
             # Clean up memory
@@ -262,9 +336,32 @@ def main():
             time.sleep(CHECK_INTERVAL_MINUTES * 60)
             
     except KeyboardInterrupt:
-        display_text("STOPPING\n\nMonitor halted")
+        display_text(MESSAGES["STOPPING"])
     except Exception as e:
-        display_text("ERROR\n\n{}".format(str(e)[:30]))
+        error_message = str(e)[:ERROR_MESSAGE_MAX_LENGTH]
+        print("Runtime error:", error_message)
+        display_text(MESSAGES["RUNTIME_ERROR"].format(error_message))
+        time.sleep(60) # Wait for 1 minute before restarting loop
+        monitoring_loop() # Restart the loop to recover
+
+def main():
+    """Main function - orchestrates the earthquake monitoring system"""
+    # Initialize device
+    if not initialize_device():
+        return
+    
+    # Show startup message
+    show_startup_message()
+    
+    # Initial WiFi connection
+    wifi_connected = connect_wifi()
+    if wifi_connected:
+        sync_time_with_ntp()
+    else:
+        display_text(MESSAGES["WIFI_RETRY"])
+    
+    # Start monitoring loop
+    monitoring_loop()
 
 # Run the main function
 if __name__ == "__main__":
