@@ -16,6 +16,7 @@ try:
     from config import (
         WIFI_SSID, WIFI_PASSWORD, MONITOR_LATITUDE, MONITOR_LONGITUDE, 
         TIMEZONE_OFFSET_HOURS, MONITOR_RADIUS_KM, CHECK_INTERVAL_MINUTES,
+        API_QUERY_PERIOD_MINUTES,
         FONT, LINE_HEIGHT, MAX_LINES,
         WIFI_MAX_RETRIES, WIFI_RETRY_DELAY, WIFI_MAX_WAIT, HTTP_TIMEOUT,
         EMSC_BASE_URL, MIN_MAGNITUDE, EARTH_RADIUS_KM,
@@ -138,7 +139,7 @@ def haversine_distance(lat1, lon1, lat2, lon2):
 def build_api_url():
     """Build EMSC API URL with time parameters"""
     current_time = time.time()
-    start_time = current_time - (CHECK_INTERVAL_MINUTES * 60)
+    start_time = current_time - (API_QUERY_PERIOD_MINUTES * 60)
     
     start_tuple = time.localtime(start_time)
     start_iso = "{:04d}-{:02d}-{:02d}T{:02d}:{:02d}:{:02d}".format(
@@ -171,6 +172,7 @@ def parse_earthquake_feature(feature):
     if len(geometry['coordinates']) < 2:
         return None
     
+    unid = properties.get('unid', '')
     longitude = geometry['coordinates'][0]
     latitude = geometry['coordinates'][1]
     magnitude = properties.get('mag', 0.0)
@@ -183,6 +185,7 @@ def parse_earthquake_feature(feature):
     
     if distance <= MONITOR_RADIUS_KM:
         return {
+            'unid': unid,
             'magnitude': magnitude,
             'place': place,
             'distance': distance,
@@ -287,22 +290,21 @@ def ensure_wifi_connection():
         sync_time_with_ntp()
     return True
 
-def format_earthquake_message(earthquakes, total_found, timestamp):
+def format_earthquake_message(earthquake, total_found, timestamp):
     """Format message based on earthquake data"""
     if total_found == -1:
         return MESSAGES["CONNECTION_ERROR"].format(timestamp)
-    elif not earthquakes:
+    elif not earthquake:
         return MESSAGES["ALL_CLEAR"].format(
             MONITOR_RADIUS_KM, total_found, timestamp
         )
     else:
-        # Show biggest earthquake if more than one happened
-        strongest = max(earthquakes, key=lambda eq: eq['magnitude'])
-        place_short = strongest['place'][:PLACE_NAME_MAX_LENGTH]
+        # Show the provided earthquake
+        place_short = earthquake['place'][:PLACE_NAME_MAX_LENGTH]
         return MESSAGES["EARTHQUAKE"].format(
-            strongest['magnitude'], 
+            earthquake['magnitude'], 
             place_short, 
-            strongest['distance'],
+            earthquake['distance'],
             timestamp
         )
 
@@ -318,6 +320,7 @@ def play_tone_alert(frequency=1000, duration=100, num_signals=1):
 
 def monitoring_loop():
     """Main monitoring loop"""
+    last_earthquake_unid = None
     try:
         while True:
             # Ensure WiFi connection
@@ -328,12 +331,21 @@ def monitoring_loop():
             earthquakes, total_found = fetch_earthquakes()
             timestamp = format_time()
             
-            # Beep if an earthquake is detected
+            earthquake_to_display = None
+            
+            # Decide whether to alert for an earthquake
             if earthquakes:
-                play_tone_alert()
+                strongest = max(earthquakes, key=lambda eq: eq['magnitude'])
+                if strongest['unid'] != last_earthquake_unid:
+                    play_tone_alert()
+                    last_earthquake_unid = strongest['unid']
+                    earthquake_to_display = strongest
+                # If same earthquake, earthquake_to_display remains None, showing ALL CLEAR
+            else:
+                last_earthquake_unid = None  # Reset when no earthquakes are in range
             
             # Format and display message
-            message = format_earthquake_message(earthquakes, total_found, timestamp)
+            message = format_earthquake_message(earthquake_to_display, total_found, timestamp)
             display_text(message)
             
             # Clean up memory
