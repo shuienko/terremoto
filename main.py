@@ -22,7 +22,7 @@ from display import (
 )
 from api import fetch_earthquakes
 from utils import format_time
-from device import initialize_device, play_tone_alert
+from device import initialize_device, play_tone_alert, set_display_brightness
 from network_utils import connect_wifi, sync_time_with_ntp, ensure_wifi_connection
 
 def monitoring_loop():
@@ -30,6 +30,9 @@ def monitoring_loop():
     last_earthquake_unid = None
     while True:
         try:
+            # Set brightness
+            set_display_brightness()
+
             # Ensure WiFi connection
             if not ensure_wifi_connection():
                 continue
@@ -84,6 +87,9 @@ def main():
     # Initialize device
     if not initialize_device():
         return
+    
+    # Set initial brightness
+    set_display_brightness()
     
     # Show startup message
     show_startup_message()

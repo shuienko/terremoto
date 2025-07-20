@@ -18,6 +18,7 @@ This project turns an M5Stack Core S3 into a real-time earthquake monitor. It fe
 - **Resilient**: Handles WiFi disconnection and API errors gracefully.
 - **Easy Configuration**: All settings are managed in a `config.py` file.
 - **Do Not Disturb**: A configurable "do not disturb" mode to silence alerts for minor earthquakes during specific hours.
+- **Automatic Display Dimming**: The display brightness is automatically reduced during "do not disturb" hours to save power and avoid being too bright at night.
 
 ## Requirements
 
@@ -61,7 +62,8 @@ This project turns an M5Stack Core S3 into a real-time earthquake monitor. It fe
     - `MONITOR_LONGITUDE`: Your longitude.
     - `MONITOR_RADIUS_KM`: The radius (in km) around your location to monitor for earthquakes.
     - `TIMEZONE_OFFSET_HOURS`: The hour difference from UTC for your local time.
-    - `DO_NOT_DISTURB_START_HOUR` and `DO_NOT_DISTURB_END_HOUR`: The start and end hours for the "do not disturb" period (e.g., 23 and 9 for 11 PM to 9 AM). During this time, alerts for earthquakes with a magnitude of less than 5.0 will be silenced.
+    - `DO_NOT_DISTURB_START_HOUR` and `DO_NOT_DISTURB_END_HOUR`: The start and end hours for the "do not disturb" period (e.g., 23 and 9 for 11 PM to 9 AM). During this time, alerts for earthquakes with a magnitude of less than 5.0 will be silenced, and the display will dim.
+    - `NORMAL_BRIGHTNESS_PERCENT` and `DIM_BRIGHTNESS_PERCENT`: The display brightness for normal operation and for the "do not disturb" period, respectively.
     - You can also adjust other settings like the check interval, minimum magnitude, etc.
 
 ## Transferring Files to M5Stack
@@ -104,7 +106,7 @@ Once the setup is complete and the files are deployed, the M5Stack will automati
 -   `api.py`: Handles all interactions with the EMSC earthquake API, including building the request URL, fetching data, and parsing the response.
 -   `config.py`: Your local configuration file (not tracked by Git). You must create this from the template.
 -   `config.template.py`: A template for the configuration file, containing all available settings.
--   `device.py`: Contains functions for interacting with the M5Stack hardware, such as initializing the screen and speaker.
+-   `device.py`: Contains functions for interacting with the M5Stack hardware, such as initializing the screen, speaker, and controlling display brightness.
 -   `display.py`: Manages what is shown on the M5Stack's screen, including message formatting, UI colors, and different display templates for alerts, info, and status messages.
 -   `network_utils.py`: Provides functions for managing WiFi connectivity (including reconnections) and NTP time synchronization.
 -   `utils.py`: A collection of utility functions, primarily for formatting timestamps into a human-readable format based on your local timezone.

@@ -2,6 +2,20 @@ import M5
 import time
 import config
 
+def set_display_brightness():
+    """Set display brightness based on Do Not Disturb period"""
+    try:
+        if is_do_not_disturb_time():
+            brightness = int(config.DIM_BRIGHTNESS_PERCENT / 100 * 255)
+            print(f"Setting brightness to dim: {config.DIM_BRIGHTNESS_PERCENT}%")
+        else:
+            brightness = int(config.NORMAL_BRIGHTNESS_PERCENT / 100 * 255)
+            print(f"Setting brightness to normal: {config.NORMAL_BRIGHTNESS_PERCENT}%")
+        
+        M5.Lcd.setBrightness(brightness)
+    except Exception as e:
+        print("Brightness error:", e)
+
 def get_local_time():
     """Get local time considering the timezone offset"""
     utc_time = time.time()

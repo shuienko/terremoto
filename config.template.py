@@ -20,9 +20,11 @@ LINE_HEIGHT = 20  # Line height in pixels for multi-line text
 MAX_LINES = 10  # Max lines to display to avoid screen overflow
 FONT = "DejaVu18"
 STARTUP_DISPLAY_DELAY = 5
+NORMAL_BRIGHTNESS_PERCENT = 100 # Default: 100
+DIM_BRIGHTNESS_PERCENT = 20 # Default: 20
 
 # -- Network & API Configuration --
-WIFI_MAX_RETRIES = 3
+WIFI_MAX_RETRIES = 2
 WIFI_RETRY_DELAY = 5
 WIFI_MAX_WAIT = 10
 HTTP_TIMEOUT = 30
