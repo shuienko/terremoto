@@ -8,6 +8,11 @@ deploy:
 	fi
 	mpremote connect /dev/tty.usbmodem1101 cp main.py :main.py
 	mpremote connect /dev/tty.usbmodem1101 cp config.py :config.py
+	mpremote connect /dev/tty.usbmodem1101 cp api.py :api.py
+	mpremote connect /dev/tty.usbmodem1101 cp device.py :device.py
+	mpremote connect /dev/tty.usbmodem1101 cp display.py :display.py
+	mpremote connect /dev/tty.usbmodem1101 cp network_utils.py :network_utils.py
+	mpremote connect /dev/tty.usbmodem1101 cp utils.py :utils.py
 	mpremote connect /dev/tty.usbmodem1101 reset
 
 connect:

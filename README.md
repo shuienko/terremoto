@@ -90,9 +90,14 @@ Once the setup is complete, you can run the `main.py` script on your M5Stack Cor
 
 ## File Descriptions
 
--   `main.py`: The main application script.
--   `config.py`: Your local configuration (you need to create this).
+-   `main.py`: The main application script that orchestrates the monitoring loop.
+-   `api.py`: Handles all interactions with the EMSC earthquake API.
+-   `config.py`: Your local configuration (you need to create this from the template).
 -   `config.template.py`: A template for the configuration file.
+-   `device.py`: Contains functions for interacting with the M5Stack hardware (display, speaker).
+-   `display.py`: Manages the display, including UI colors, message formats, and rendering functions.
+-   `network_utils.py`: Provides functions for managing WiFi connectivity and NTP time synchronization.
+-   `utils.py`: A collection of utility functions, such as time formatting.
 -   `LICENSE`: The project's license.
 -   `README.md`: This file.
 
