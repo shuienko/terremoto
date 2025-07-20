@@ -3,19 +3,16 @@ WIFI_SSID = "YOUR_WIFI_SSID"
 WIFI_PASSWORD = "YOUR_WIFI_PASSWORD"
 
 # -- Monitoring Configuration --
-MONITOR_LATITUDE = 40.4168  # Madrid
-MONITOR_LONGITUDE = -3.7038  # Madrid
-MONITOR_RADIUS_KM = 1000
+MONITOR_LATITUDE = 51.5074 # London
+MONITOR_LONGITUDE = -0.1278 # London
+MONITOR_RADIUS_KM = 500
 CHECK_INTERVAL_MINUTES = 5
-MIN_MAGNITUDE = 2.5
+MIN_MAGNITUDE = 0
 
 # -- Time Configuration --
 TIMEZONE_OFFSET_HOURS = 2  # Central European Summer Time (Spain)
 
 # -- Display Configuration --
-SCREEN_WIDTH = 320
-SCREEN_HEIGHT = 240
-TEXT_SIZE = 2  # Default text size multiplier (1, 2, 3...)
 LINE_HEIGHT = 20  # Line height in pixels for multi-line text
 MAX_LINES = 10  # Max lines to display to avoid screen overflow
 FONT = "DejaVu18"
@@ -30,5 +27,5 @@ EMSC_BASE_URL = "https://www.seismicportal.eu/fdsnws/event/1/query"
 
 # -- Data & Formatting Configuration --
 EARTH_RADIUS_KM = 6371
-PLACE_NAME_MAX_LENGTH = 20
+PLACE_NAME_MAX_LENGTH = 25
 ERROR_MESSAGE_MAX_LENGTH = 100 
