@@ -17,6 +17,7 @@ This project turns an M5Stack Core S3 into a real-time earthquake monitor. It fe
 - **Time Synchronization**: Syncs with an NTP server to ensure accurate time.
 - **Resilient**: Handles WiFi disconnection and API errors gracefully.
 - **Easy Configuration**: All settings are managed in a `config.py` file.
+- **Do Not Disturb**: A configurable "do not disturb" mode to silence alerts for minor earthquakes during specific hours.
 
 ## Requirements
 
@@ -60,6 +61,7 @@ This project turns an M5Stack Core S3 into a real-time earthquake monitor. It fe
     - `MONITOR_LONGITUDE`: Your longitude.
     - `MONITOR_RADIUS_KM`: The radius (in km) around your location to monitor for earthquakes.
     - `TIMEZONE_OFFSET_HOURS`: The hour difference from UTC for your local time.
+    - `DO_NOT_DISTURB_START_HOUR` and `DO_NOT_DISTURB_END_HOUR`: The start and end hours for the "do not disturb" period (e.g., 23 and 9 for 11 PM to 9 AM). During this time, alerts for earthquakes with a magnitude of less than 5.0 will be silenced.
     - You can also adjust other settings like the check interval, minimum magnitude, etc.
 
 ## Transferring Files to M5Stack

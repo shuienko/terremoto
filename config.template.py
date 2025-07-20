@@ -12,6 +12,8 @@ MIN_MAGNITUDE = 0
 
 # -- Time Configuration --
 TIMEZONE_OFFSET_HOURS = 2  # Central European Summer Time (Spain)
+DO_NOT_DISTURB_START_HOUR = 23
+DO_NOT_DISTURB_END_HOUR = 9
 
 # -- Display Configuration --
 LINE_HEIGHT = 20  # Line height in pixels for multi-line text
