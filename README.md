@@ -1,242 +1,132 @@
-# 🌍 Terremoto - Earthquake Alert System
+# Terremoto - M5Stack Core S3 Earthquake Monitor
 
-A Go application that sends daily notifications about earthquakes in your area using the [EMSC (European-Mediterranean Seismological Centre)](https://www.seismicportal.eu/) API and [Pushover](https://pushover.net) for notifications.
+This project turns an M5Stack Core S3 into a real-time earthquake monitor. It fetches data from the EMSC (European-Mediterranean Seismological Centre) API and displays information about recent earthquakes within a specified radius of your location.
 
 ## Features
 
-- 🌍 **Real-time earthquake data** from EMSC's global network
-- 📍 **Location-based filtering** with customizable radius
-- 🔔 **Daily push notifications** via Pushover
-- 📊 **Detailed earthquake information** including magnitude, location, and distance
-- 📝 **Comprehensive logging** for monitoring and debugging
-- ⏰ **Scheduled alerts** at configurable times
-- 🚀 **High performance** with Go's concurrency and efficiency
-- 🌐 **Global coverage** including micro-earthquakes
+- **Real-time Monitoring**: Checks for new earthquake data at regular intervals.
+- **Location-based Filtering**: Only shows earthquakes within a configurable radius of your GPS coordinates.
+- **Magnitude Filtering**: Ignores earthquakes below a minimum magnitude.
+- **Clear Display**: Shows key information on the M5Stack's screen:
+    - Magnitude
+    - Location name
+    - Distance from your location
+    - Time of the event
+- **Audio Alerts**: Plays a tone when a new earthquake is detected.
+- **WiFi Connectivity**: Connects to your WiFi network to fetch data.
+- **Time Synchronization**: Syncs with an NTP server to ensure accurate time.
+- **Resilient**: Handles WiFi disconnection and API errors gracefully.
+- **Easy Configuration**: All settings are managed in a `config.py` file.
+- **Do Not Disturb**: A configurable "do not disturb" mode to silence alerts for minor earthquakes during specific hours.
 
-## Prerequisites
+## Requirements
 
-1. **Go 1.21+** installed on your system
-2. **Pushover account** - Sign up at [pushover.net](https://pushover.net)
-3. **Your location coordinates** (latitude and longitude)
+### Hardware
 
-## Installation
+- M5Stack Core S3
 
-1. **Clone the repository:**
-   ```bash
-   git clone <repository-url>
-   cd terremoto
-   ```
+### Software
 
-2. **Install dependencies:**
-   ```bash
-   go mod tidy
-   ```
+- MicroPython for M5Stack Core S3
+- `urequests` library for MicroPython
 
-3. **Set up environment variables:**
-   ```bash
-   cp env.example .env
-   ```
-   
-   Edit the `.env` file with your configuration:
-   ```env
-   # Your location coordinates
-   LATITUDE=40.7128
-   LONGITUDE=-74.0060
-   RADIUS_KM=100
-   
-   # Pushover credentials (get these from pushover.net)
-   PUSHOVER_USER_KEY=your_user_key_here
-   PUSHOVER_APP_TOKEN=your_app_token_here
-   
-   # Optional settings
-   ALERT_TIME=08:00
-   LOG_LEVEL=INFO
-   ```
+## Setup
 
-## Pushover Setup
+1.  **Install MicroPython**: Make sure your M5Stack Core S3 is flashed with the correct version of MicroPython.
 
-1. **Create a Pushover account** at [pushover.net](https://pushover.net)
-2. **Get your User Key** from the main page after logging in
-3. **Create an application** to get your App Token:
-   - Go to "Your Applications" → "Create an Application"
-   - Name it "Earthquake Alert" or similar
-   - Copy the App Token
+2.  **Clone the repository**:
+    ```bash
+    git clone https://github.com/your-username/terremoto.git
+    cd terremoto
+    ```
+
+3.  **Install Libraries**:
+    This project requires the `urequests` library. You can install it on your M5Stack using `upip`:
+    ```python
+    import upip
+    upip.install('micropython-urequests')
+    ```
+
+4.  **Create `config.py`**:
+    Copy the `config.template.py` file to `config.py`:
+    ```bash
+    cp config.template.py config.py
+    ```
+
+5.  **Configure the monitor**:
+    Open `config.py` and edit the following settings:
+    - `WIFI_SSID`: Your WiFi network name.
+    - `WIFI_PASSWORD`: Your WiFi password.
+    - `MONITOR_LATITUDE`: Your latitude.
+    - `MONITOR_LONGITUDE`: Your longitude.
+    - `MONITOR_RADIUS_KM`: The radius (in km) around your location to monitor for earthquakes.
+    - `TIMEZONE_OFFSET_HOURS`: The hour difference from UTC for your local time.
+    - `DO_NOT_DISTURB_START_HOUR` and `DO_NOT_DISTURB_END_HOUR`: The start and end hours for the "do not disturb" period (e.g., 23 and 9 for 11 PM to 9 AM). During this time, alerts for earthquakes with a magnitude of less than 5.0 will be silenced.
+    - You can also adjust other settings like the check interval, minimum magnitude, etc.
+
+## Transferring Files to M5Stack
+
+This project includes a `Makefile` to simplify the process of transferring your code to the M5Stack.
+
+1.  **Connect your M5Stack**: Plug your M5Stack Core S3 into your computer via USB.
+
+2.  **Find your device's serial port**: You may need to identify the correct serial port for your M5Stack. On macOS, it will likely be something like `/dev/tty.usbmodem...`, and on Linux, `/dev/ttyUSB0` or similar. You might need to edit the `Makefile` to specify the correct port (`AMPY_PORT`).
+
+3.  **Deploy the code**: Run the following command in your terminal:
+    ```bash
+    make deploy
+    ```
+    This command will:
+    - Check if `config.py` exists. If not, it will remind you to create one.
+    - Copy all `.py` files to your M5Stack.
+    - Reset the device to start running the new code.
+
+    To connect to the device's REPL (Read-Eval-Print Loop), run:
+    ```bash
+    make connect
+    ```
 
 ## Usage
 
-### Test the System
+Once the setup is complete and the files are deployed, the M5Stack will automatically run `main.py`. The device will:
+1.  Initialize and display a startup message with your monitoring settings.
+2.  Connect to your WiFi network.
+3.  Synchronize its time with an NTP server.
+4.  Start the main monitoring loop:
+    - Fetch earthquake data from the EMSC API.
+    - If a new, significant earthquake is detected within your configured radius, it will display an alert and play a tone.
+    - If no earthquakes are found, it will show an "ALL CLEAR" message with a summary of worldwide events.
+    - The screen updates at the interval defined in `config.py`.
 
-Before running the full system, test it to ensure everything works:
+## File Descriptions
 
-```bash
-go run cmd/test/main.go
-```
-
-This will:
-- Test the earthquake data fetching
-- Verify message formatting
-- Check distance calculations
-- **No actual notifications will be sent**
-
-### Run the Alert System
-
-```bash
-go run main.go
-```
-
-The system will:
-- Start the scheduled daily alerts
-- Run immediately if `RUN_IMMEDIATELY=true` is set in your `.env` file
-- Continue running until stopped with Ctrl+C
-
-### Run with Immediate Check
-
-To run an immediate check without waiting for the scheduled time:
-
-```bash
-RUN_IMMEDIATELY=true go run main.go
-```
-
-### Build and Run
-
-You can also build the application for production:
-
-```bash
-go build -o terremoto main.go
-./terremoto
-```
-
-## Configuration Options
-
-| Variable | Description | Default | Required |
-|----------|-------------|---------|----------|
-| `LATITUDE` | Your latitude coordinate | - | Yes |
-| `LONGITUDE` | Your longitude coordinate | - | Yes |
-| `RADIUS_KM` | Search radius in kilometers | 100 | No |
-| `PUSHOVER_USER_KEY` | Your Pushover User Key | - | Yes |
-| `PUSHOVER_APP_TOKEN` | Your Pushover App Token | - | Yes |
-| `ALERT_TIME` | Daily alert time (24h format) | 08:00 | No |
-| `LOG_LEVEL` | Logging level (DEBUG, INFO, WARNING, ERROR) | INFO | No |
-
-## Sample Output
-
-The system will send notifications like this:
-
-```
-🌍 Earthquake Alert - Last 24 Hours
-📍 Location: 40.7128, -74.0060
-📏 Radius: 100km
-📊 Found 2 earthquake(s):
-
-1. Magnitude 3.2 - 5km NE of New York, NY
-   📅 2024-01-15 14:30 UTC
-   📍 Distance: 45.2km
-
-2. Magnitude 2.1 - 10km SW of Newark, NJ
-   📅 2024-01-15 12:15 UTC
-   📍 Distance: 78.9km
-```
-
-## Logging
-
-The application creates detailed logs in `earthquake_alerts.log` and also outputs to the console. Log levels can be configured via the `LOG_LEVEL` environment variable.
-
-## Project Structure
-
-```
-terremoto/
-├── main.go                 # Main application entry point
-├── go.mod                  # Go module definition
-├── go.sum                  # Go module checksums
-├── pkg/
-│   └── earthquake/
-│       └── alert.go        # Core earthquake alert functionality
-├── cmd/
-│   └── test/
-│       └── main.go         # Test command
-├── env.example             # Environment variables template
-├── earthquake_alerts.log   # Application logs
-└── README.md              # This file
-```
-
-## Deployment Options
-
-### Local Machine
-Run the application directly on your local machine. It will continue running until stopped.
-
-### Server/VPS
-Deploy on a server for 24/7 operation:
-```bash
-go build -o terremoto main.go
-nohup ./terremoto > earthquake.log 2>&1 &
-```
-
-### Docker
-Create a Dockerfile for containerized deployment:
-```dockerfile
-FROM golang:1.21-alpine AS builder
-WORKDIR /app
-COPY . .
-RUN go mod download
-RUN go build -o terremoto main.go
-
-FROM alpine:latest
-RUN apk --no-cache add ca-certificates
-WORKDIR /root/
-COPY --from=builder /app/terremoto .
-CMD ["./terremoto"]
-```
+-   `main.py`: The main application script. It initializes the device, handles network connections, and runs the monitoring loop.
+-   `api.py`: Handles all interactions with the EMSC earthquake API, including building the request URL, fetching data, and parsing the response.
+-   `config.py`: Your local configuration file (not tracked by Git). You must create this from the template.
+-   `config.template.py`: A template for the configuration file, containing all available settings.
+-   `device.py`: Contains functions for interacting with the M5Stack hardware, such as initializing the screen and speaker.
+-   `display.py`: Manages what is shown on the M5Stack's screen, including message formatting, UI colors, and different display templates for alerts, info, and status messages.
+-   `network_utils.py`: Provides functions for managing WiFi connectivity (including reconnections) and NTP time synchronization.
+-   `utils.py`: A collection of utility functions, primarily for formatting timestamps into a human-readable format based on your local timezone.
+-   `LICENSE`: The project's license.
+-   `README.md`: This file.
+-   `Makefile`: Contains helper commands for deploying code to the device and connecting to its REPL.
 
 ## Troubleshooting
 
-### Common Issues
+- **WiFi Connection Issues**:
+    - Double-check your `WIFI_SSID` and `WIFI_PASSWORD` in `config.py`.
+    - Ensure your M5Stack is within range of your WiFi router.
+    - The device will automatically try to reconnect if the connection is lost.
 
-1. **"PUSHOVER_USER_KEY and PUSHOVER_APP_TOKEN must be set"**
-   - Ensure your `.env` file is properly configured
-   - Check that the environment variables are loaded
+- **API Errors**:
+    - The monitor will display a "CONNECTION ERROR" message if it cannot reach the EMSC API. This is often temporary.
+    - The device will continue to retry at the specified interval.
 
-2. **"Error fetching earthquake data"**
-   - Check your internet connection
-   - The EMSC API might be temporarily unavailable
-
-3. **"Error sending Pushover notification"**
-   - Verify your Pushover credentials
-   - Check your internet connection
-   - Ensure your Pushover account is active
-
-### Debug Mode
-
-Enable debug logging by setting:
-```env
-LOG_LEVEL=DEBUG
-```
-
-## API Information
-
-This application uses the [EMSC (European-Mediterranean Seismological Centre) FDSN Web Service](https://www.seismicportal.eu/fdsnws/event/1/) for earthquake data. The service provides:
-
-- Global earthquake data with excellent European coverage
-- Real-time updates
-- Multiple data formats (JSON, XML)
-- No API key required
-- Includes micro-earthquakes and smaller seismic events
-
-## Performance
-
-The Go implementation provides:
-- **Fast startup times** - typically under 100ms
-- **Low memory usage** - ~5-10MB RAM
-- **Efficient HTTP handling** - built-in connection pooling
-- **Concurrent processing** - can handle multiple requests efficiently
+- **Incorrect Time**:
+    - Ensure the `TIMEZONE_OFFSET_HOURS` in `config.py` is set correctly for your location.
+    - If the device fails to sync with the NTP server, it will display a warning. A successful time sync is required for accurate earthquake event times.
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-## License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## Disclaimer
-
-This application is for informational purposes only. Always follow official emergency procedures and local authorities' guidance during earthquakes.
+Contributions are welcome! Please feel free to submit a pull request. 
