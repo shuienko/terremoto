@@ -41,48 +41,85 @@ MESSAGES = {
     "RUNTIME_ERROR": "RUNTIME ERROR\n\n{}\n\nRestarting loop...",
 }
 
-def display_text(text):
-    """Display text on M5Stack Core S3 screen with larger font and centered text"""
+# -- UI Colors --
+COLOR_BLACK = 0x000000
+COLOR_WHITE = 0xFFFFFF
+COLOR_RED = 0xFF0000
+COLOR_DARK_RED = 0x8B0000
+COLOR_GREEN = 0x00FF00
+COLOR_DARK_GREEN = 0x006400
+COLOR_BLUE = 0x0000FF
+COLOR_DARK_BLUE = 0x00008B
+COLOR_YELLOW = 0xFFFF00
+COLOR_DARK_YELLOW = 0xCCCC00
+
+def _display_template(text, title_bg_color):
+    """A template for displaying messages with a colored title bar."""
     print("Display:", text)
-    
+
     try:
-        M5.Lcd.clear()
-        
-        # Set font from config
-        M5.Lcd.setFont(getattr(M5.Lcd.FONTS, FONT))
-        
-        # Get screen dimensions
+        M5.Lcd.clear(COLOR_BLACK)
+
+        lines = text.split('\n')
+        title = lines[0]
+        body_text = "\n".join(lines[1:])
+
         screen_width = M5.Display.width()
         screen_height = M5.Display.height()
-        
-        lines = text.split('\n')
+
+        # --- Draw Title Bar ---
+        title_height = 30
+        M5.Lcd.fillRect(0, 0, screen_width, title_height, title_bg_color)
+
+        # --- Draw Title Text ---
+        M5.Lcd.setFont(M5.Lcd.FONTS.DejaVu18)
+        M5.Lcd.setTextColor(COLOR_WHITE, title_bg_color)
+        title_width = M5.Lcd.textWidth(title)
+        M5.Lcd.drawString(title, (screen_width - title_width) // 2, (title_height - 18) // 2)
+
+        # --- Draw Body Text ---
+        M5.Lcd.setFont(getattr(M5.Lcd.FONTS, FONT))
+        M5.Lcd.setTextColor(COLOR_WHITE, COLOR_BLACK)
+
+        body_lines = body_text.strip().split('\n')
         max_lines = MAX_LINES
-        
-        # Calculate total text height
+
         line_height = LINE_HEIGHT
-        total_text_height = min(len(lines), max_lines) * line_height
-        
-        # Start y position to center text vertically
-        start_y = (screen_height - total_text_height) // 2
-        
+        total_text_height = min(len(body_lines), max_lines) * line_height
+
+        content_height = screen_height - title_height
+        start_y = title_height + (content_height - total_text_height) // 2
+
         y = start_y
-        for line in lines[:max_lines]:
-            if line.strip():  # Only process non-empty lines
-                # Calculate x position to center text horizontally
-                # Use M5Stack's textWidth method for accurate centering
+        for line in body_lines[:max_lines]:
+            if line.strip():
                 try:
                     text_width = M5.Lcd.textWidth(line)
                     x = max(0, (screen_width - text_width) // 2)
                 except:
-                    # Fallback to manual calculation if textWidth not available
                     text_width = len(line) * 10
                     x = max(0, (screen_width - text_width) // 2)
-                
+
                 M5.Lcd.drawString(line, x, y)
             y += line_height
-            
+
     except Exception as e:
         print("LCD Error:", e)
+
+def display_info(text):
+    _display_template(text, COLOR_DARK_BLUE)
+
+def display_success(text):
+    _display_template(text, COLOR_DARK_GREEN)
+
+def display_warning(text):
+    _display_template(text, COLOR_DARK_YELLOW)
+
+def display_error(text):
+    _display_template(text, COLOR_DARK_RED)
+
+def display_earthquake_alert(text):
+    _display_template(text, COLOR_RED)
 
 def connect_wifi(max_retries=WIFI_MAX_RETRIES, retry_delay=WIFI_RETRY_DELAY):
     """Connect to WiFi network with retry logic"""
@@ -98,7 +135,7 @@ def connect_wifi(max_retries=WIFI_MAX_RETRIES, retry_delay=WIFI_RETRY_DELAY):
 
     for attempt in range(max_retries):
         print("Connecting to WiFi (attempt {}/{})...".format(attempt + 1, max_retries))
-        display_text(MESSAGES["WIFI_CONNECTING_ATTEMPT"].format(attempt + 1, max_retries))
+        display_info(MESSAGES["WIFI_CONNECTING_ATTEMPT"].format(attempt + 1, max_retries))
 
         # Ensure any previous connection attempt is stopped
         try:
@@ -310,12 +347,12 @@ def sync_time_with_ntp():
         ntptime.settime()
         print("Time synchronized successfully")
         current_time_str = format_time()
-        display_text(MESSAGES["TIME_SYNCED"].format(current_time_str))
+        display_success(MESSAGES["TIME_SYNCED"].format(current_time_str))
         time.sleep(2)
         return True
     except Exception as e:
         print("NTP Error:", e)
-        display_text(MESSAGES["NTP_FAILED"])
+        display_warning(MESSAGES["NTP_FAILED"])
         time.sleep(2)
         return False
 
@@ -336,7 +373,7 @@ def show_startup_message():
     startup_msg = MESSAGES["STARTUP"].format(
         MONITOR_LATITUDE, MONITOR_LONGITUDE, MONITOR_RADIUS_KM
     )
-    display_text(startup_msg)
+    display_info(startup_msg)
     time.sleep(STARTUP_DISPLAY_DELAY)
 
 def ensure_wifi_connection():
@@ -344,10 +381,10 @@ def ensure_wifi_connection():
     wlan = network.WLAN(network.STA_IF)
     if not wlan.isconnected():
         print("WiFi disconnected, attempting to reconnect...")
-        display_text(MESSAGES["WIFI_LOST"])
+        display_warning(MESSAGES["WIFI_LOST"])
         wifi_connected = connect_wifi()
         if not wifi_connected:
-            display_text(MESSAGES["WIFI_FAILED"].format(CHECK_INTERVAL_MINUTES))
+            display_error(MESSAGES["WIFI_FAILED"].format(CHECK_INTERVAL_MINUTES))
             time.sleep(CHECK_INTERVAL_MINUTES * 60)
             return False
         # If reconnected, sync time
@@ -357,21 +394,21 @@ def ensure_wifi_connection():
 def format_earthquake_message(earthquake, total_found, check_timestamp):
     """Format message based on earthquake data"""
     if total_found == -1:
-        return MESSAGES["CONNECTION_ERROR"].format(check_timestamp)
+        return MESSAGES["CONNECTION_ERROR"].format(check_timestamp), "warning"
     elif not earthquake:
         return MESSAGES["ALL_CLEAR"].format(
             MONITOR_RADIUS_KM, API_QUERY_PERIOD_MINUTES, total_found, check_timestamp
-        )
+        ), "success"
     else:
         # Show the provided earthquake
         place_short = earthquake['place'][:PLACE_NAME_MAX_LENGTH]
         event_time_str = format_event_time(earthquake.get('timestamp', ''))
         return MESSAGES["EARTHQUAKE"].format(
-            earthquake['magnitude'], 
-            place_short, 
+            earthquake['magnitude'],
+            place_short,
             earthquake['distance'],
             event_time_str
-        )
+        ), "alert"
 
 def play_tone_alert(frequency=1000, duration=100, num_signals=1):
     """Play a tone alert with specified frequency, duration and repetitions"""
@@ -410,8 +447,16 @@ def monitoring_loop():
                 last_earthquake_unid = None  # Reset when no earthquakes are in range
             
             # Format and display message
-            message = format_earthquake_message(earthquake_to_display, total_found, check_timestamp)
-            display_text(message)
+            message, message_type = format_earthquake_message(earthquake_to_display, total_found, check_timestamp)
+            
+            if message_type == "alert":
+                display_earthquake_alert(message)
+            elif message_type == "success":
+                display_success(message)
+            elif message_type == "warning":
+                display_warning(message)
+            else:
+                display_info(message)
             
             # Clean up memory
             gc.collect()
@@ -420,12 +465,12 @@ def monitoring_loop():
             time.sleep(CHECK_INTERVAL_MINUTES * 60)
             
         except KeyboardInterrupt:
-            display_text(MESSAGES["STOPPING"])
+            display_info(MESSAGES["STOPPING"])
             break
         except Exception as e:
             error_message = str(e)[:ERROR_MESSAGE_MAX_LENGTH]
             print("Runtime error:", error_message)
-            display_text(MESSAGES["RUNTIME_ERROR"].format(error_message))
+            display_error(MESSAGES["RUNTIME_ERROR"].format(error_message))
             time.sleep(60) # Wait for 1 minute before restarting loop
             continue # Restart the loop to recover
 
@@ -443,7 +488,7 @@ def main():
 
     # If the first attempt fails, show a message, wait, and retry once more before giving up.
     if not wifi_connected:
-        display_text(MESSAGES["WIFI_FAILED"].format(CHECK_INTERVAL_MINUTES))
+        display_error(MESSAGES["WIFI_FAILED"].format(CHECK_INTERVAL_MINUTES))
         time.sleep(CHECK_INTERVAL_MINUTES * 60)
         wifi_connected = connect_wifi()
 
@@ -452,7 +497,7 @@ def main():
     else:
         # Abort startup if we still have no network; avoids crashing later.
         print("Startup aborted: unable to establish WiFi connection.")
-        display_text(MESSAGES["WIFI_FAILED"].format(CHECK_INTERVAL_MINUTES))
+        display_error(MESSAGES["WIFI_FAILED"].format(CHECK_INTERVAL_MINUTES))
         return
     
     # Start monitoring loop
