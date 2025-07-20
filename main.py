@@ -35,8 +35,8 @@ MESSAGES = {
     "TIME_SYNCED": "TIME SYNCED\n\n{}",
     "NTP_FAILED": "NTP FAILED\n\nWill use\nlast known time",
     "CONNECTION_ERROR": "CONNECTION\nERROR\n\nRetrying WiFi\n\nLast check: {}",
-    "ALL_CLEAR": "== ALL CLEAR ==\n\nNo earthquakes\nin {}km radius\n\nTotal in the world: {}\nLast check: {}",
-    "EARTHQUAKE": "!!! EARTHQUAKE !!!\n\nMag: {:.1f}\n{}\nDist: {:.0f}km\n\nLast check: {}",
+    "ALL_CLEAR": "== ALL CLEAR ==\n\nNo earthquakes\nin {}km radius\n\nWorldwide {}m: {}\nLast check: {}",
+    "EARTHQUAKE": "!!! EARTHQUAKE !!!\n\nMag: {:.1f}\n{}\nDist: {:.0f}km\n\nTime: {}",
     "STOPPING": "STOPPING\n\nMonitor halted",
     "RUNTIME_ERROR": "RUNTIME ERROR\n\n{}\n\nRestarting loop...",
 }
@@ -176,8 +176,8 @@ def parse_earthquake_feature(feature):
     longitude = geometry['coordinates'][0]
     latitude = geometry['coordinates'][1]
     magnitude = properties.get('mag', 0.0)
-    place = properties.get('flynn_region', 'Unknown')
-    timestamp = properties.get('time', 0)
+    place = properties.get('flynn_region', 'Unknown')    
+    timestamp = properties.get('time', '')
     
     distance = haversine_distance(
         MONITOR_LATITUDE, MONITOR_LONGITUDE, latitude, longitude
@@ -238,6 +238,54 @@ def format_time():
     t = time.gmtime(local_time)
     return "{:02d}:{:02d}:{:02d}".format(t[3], t[4], t[5])
 
+def format_event_time(iso_timestamp):
+    """
+    Get earthquake event time as a string with local timezone from an ISO timestamp.
+    Example input: "2024-07-20T10:32:17.110Z"
+    """
+    if not iso_timestamp or 'T' not in iso_timestamp:
+        return "Unknown"
+    
+    try:
+        # 1. Parse ISO string to get date and time components
+        # e.g., "2024-07-20T10:32:17.110Z"
+        date_part, time_part_full = iso_timestamp.split('T')
+        
+        # "2024-07-20" -> (2024, 7, 20)
+        year, month, day = [int(p) for p in date_part.split('-')]
+        
+        # "10:32:17.110Z" -> "10:32:17" -> (10, 32, 17)
+        time_part = time_part_full.split('.')[0]
+        h, m, s = [int(p) for p in time_part.split(':')]
+
+        # 2. Create a time tuple for MicroPython's time.mktime.
+        # It requires a 9-tuple: (year, month, mday, hour, minute, second, weekday, yearday, isdst)
+        # Weekday, yearday, and isdst can be dummy values.
+        event_utc_tuple = (year, month, day, h, m, s, 0, 0, 0)
+
+        # 3. Convert the UTC tuple to seconds since the epoch.
+        # On a system where the clock is UTC (set by NTP), mktime treats the tuple as UTC.
+        event_utc_seconds = time.mktime(event_utc_tuple)
+        
+        # 4. Apply the timezone offset to get local time in seconds.
+        event_local_seconds = event_utc_seconds + (TIMEZONE_OFFSET_HOURS * 3600)
+        
+        # 5. Convert local time in seconds back to a time tuple.
+        # Use time.gmtime() to format seconds into a tuple without extra timezone conversion.
+        t = time.gmtime(event_local_seconds)
+        
+        # 6. Format the time part.
+        return "{:02d}:{:02d}:{:02d}".format(t[3], t[4], t[5])
+
+    except (ValueError, IndexError) as e:
+        print("Time parse error:", e)
+        # Fallback for unexpected timestamp format
+        try:
+            time_part = iso_timestamp.split('T')[1].split('.')[0]
+            return f"{time_part} UTC"
+        except Exception:
+            return "Invalid Time"
+
 def sync_time_with_ntp():
     """Synchronize device time with NTP server"""
     print("Synchronizing time with NTP server...")
@@ -290,22 +338,23 @@ def ensure_wifi_connection():
         sync_time_with_ntp()
     return True
 
-def format_earthquake_message(earthquake, total_found, timestamp):
+def format_earthquake_message(earthquake, total_found, check_timestamp):
     """Format message based on earthquake data"""
     if total_found == -1:
-        return MESSAGES["CONNECTION_ERROR"].format(timestamp)
+        return MESSAGES["CONNECTION_ERROR"].format(check_timestamp)
     elif not earthquake:
         return MESSAGES["ALL_CLEAR"].format(
-            MONITOR_RADIUS_KM, total_found, timestamp
+            MONITOR_RADIUS_KM, API_QUERY_PERIOD_MINUTES, total_found, check_timestamp
         )
     else:
         # Show the provided earthquake
         place_short = earthquake['place'][:PLACE_NAME_MAX_LENGTH]
+        event_time_str = format_event_time(earthquake.get('timestamp', ''))
         return MESSAGES["EARTHQUAKE"].format(
             earthquake['magnitude'], 
             place_short, 
             earthquake['distance'],
-            timestamp
+            event_time_str
         )
 
 def play_tone_alert(frequency=1000, duration=100, num_signals=1):
@@ -329,7 +378,7 @@ def monitoring_loop():
             
             # Fetch earthquake data
             earthquakes, total_found = fetch_earthquakes()
-            timestamp = format_time()
+            check_timestamp = format_time()
             
             earthquake_to_display = None
             
@@ -345,7 +394,7 @@ def monitoring_loop():
                 last_earthquake_unid = None  # Reset when no earthquakes are in range
             
             # Format and display message
-            message = format_earthquake_message(earthquake_to_display, total_found, timestamp)
+            message = format_earthquake_message(earthquake_to_display, total_found, check_timestamp)
             display_text(message)
             
             # Clean up memory
