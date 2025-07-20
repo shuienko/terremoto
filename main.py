@@ -11,14 +11,12 @@ import M5
 import network
 import ntptime
 
-print("M5Stack Core S3 libraries loaded")
-
 # Import configuration
 try:
     from config import (
         WIFI_SSID, WIFI_PASSWORD, MONITOR_LATITUDE, MONITOR_LONGITUDE, 
         TIMEZONE_OFFSET_HOURS, MONITOR_RADIUS_KM, CHECK_INTERVAL_MINUTES,
-        SCREEN_WIDTH, SCREEN_HEIGHT, TEXT_SIZE, LINE_HEIGHT, MAX_LINES,
+        FONT, LINE_HEIGHT, MAX_LINES,
         WIFI_MAX_RETRIES, WIFI_RETRY_DELAY, WIFI_MAX_WAIT, HTTP_TIMEOUT,
         EMSC_BASE_URL, MIN_MAGNITUDE, EARTH_RADIUS_KM,
         PLACE_NAME_MAX_LENGTH, ERROR_MESSAGE_MAX_LENGTH, STARTUP_DISPLAY_DELAY
@@ -27,24 +25,17 @@ except ImportError:
     print("Error: config.py not found. Please create config.py from config.template.py")
     raise
 
-# Import FONT from config with a fallback for backward compatibility
-try:
-    from config import FONT
-except ImportError:
-    FONT = None
-
 # -- Message Formats --
 MESSAGES = {
-    "STARTUP": "TERREMOTO MONITOR\n\nStarting\n\nLat: {:.2f}\nLon: {:.2f}\nRadius: {}km",
+    "STARTUP": "EARTHQUAKE MONITOR\n\nStarting...\n\nLat: {:.2f}\nLon: {:.2f}\nRadius: {}km",
     "WIFI_LOST": "WIFI LOST\n\nReconnecting...",
     "WIFI_FAILED": "WIFI FAILED\n\nRetrying in\n{} minutes",
-    "WIFI_RETRY": "WIFI FAILED\n\nWill retry\nduring operation",
     "SYNCING_TIME": "SYNCING TIME\n\nwith NTP...",
     "TIME_SYNCED": "TIME SYNCED\n\n{}",
     "NTP_FAILED": "NTP FAILED\n\nWill use\nlast known time",
     "CONNECTION_ERROR": "CONNECTION\nERROR\n\nRetrying WiFi\n\nLast check: {}",
     "ALL_CLEAR": "== ALL CLEAR ==\n\nNo earthquakes\nin {}km radius\n\nTotal in the world: {}\nLast check: {}",
-    "EARTHQUAKE": "!EARTHQUAKE!\n\nMag: {:.1f}\n{}\nDist: {:.0f}km\n\nLast check: {}",
+    "EARTHQUAKE": "!!! EARTHQUAKE !!!\n\nMag: {:.1f}\n{}\nDist: {:.0f}km\n\nLast check: {}",
     "STOPPING": "STOPPING\n\nMonitor halted",
     "RUNTIME_ERROR": "RUNTIME ERROR\n\n{}\n\nRestarting loop...",
 }
@@ -56,16 +47,12 @@ def display_text(text):
     try:
         M5.Lcd.clear()
         
-        # Set font from config if available, otherwise use legacy text size
-        if FONT and hasattr(M5.Lcd.FONTS, FONT):
-            M5.Lcd.setFont(getattr(M5.Lcd.FONTS, FONT))
-        else:
-            # Set font size from config
-            M5.Lcd.setTextSize(TEXT_SIZE)
+        # Set font from config
+        M5.Lcd.setFont(getattr(M5.Lcd.FONTS, FONT))
         
-        # Get screen dimensions from config
-        screen_width = SCREEN_WIDTH
-        screen_height = SCREEN_HEIGHT
+        # Get screen dimensions
+        screen_width = M5.Display.width()
+        screen_height = M5.Display.height()
         
         lines = text.split('\n')
         max_lines = MAX_LINES
@@ -241,11 +228,11 @@ def fetch_earthquakes():
         return [], -1
 
 def format_time():
-    """Get current time as string with Spain timezone"""
-    # Get UTC time and adjust for Spain timezone
+    """Get current time as string with local timezone"""
+    # Get UTC time and adjust for local timezone
     utc_time = time.time()
-    spain_time = utc_time + (TIMEZONE_OFFSET_HOURS * 3600)
-    t = time.gmtime(spain_time)
+    local_time = utc_time + (TIMEZONE_OFFSET_HOURS * 3600)
+    t = time.gmtime(local_time)
     return "{:02d}:{:02d}:{:02d}".format(t[3], t[4], t[5])
 
 def sync_time_with_ntp():
@@ -270,6 +257,7 @@ def initialize_device():
     try:
         M5.begin()
         M5.Lcd.clear()
+        M5.Speaker.begin()
         print("M5Stack Core S3 initialized")
         return True
     except Exception as e:
@@ -318,6 +306,16 @@ def format_earthquake_message(earthquakes, total_found, timestamp):
             timestamp
         )
 
+def play_tone_alert(frequency=1000, duration=100, num_signals=1):
+    """Play a tone alert with specified frequency, duration and repetitions"""
+    try:
+        for i in range(num_signals):
+            M5.Speaker.tone(frequency, duration)
+            if i < num_signals - 1:
+                time.sleep(0.05)  # 50ms pause between beeps
+    except Exception as e:
+        print("Speaker error:", e)
+
 def monitoring_loop():
     """Main monitoring loop"""
     try:
@@ -330,10 +328,9 @@ def monitoring_loop():
             earthquakes, total_found = fetch_earthquakes()
             timestamp = format_time()
             
-            # Handle connection error by trying to reconnect WiFi
-            if total_found == -1:
-                # The ensure_wifi_connection() at the start of the loop will handle this
-                pass
+            # Beep if an earthquake is detected
+            if earthquakes:
+                play_tone_alert()
             
             # Format and display message
             message = format_earthquake_message(earthquakes, total_found, timestamp)
@@ -367,8 +364,6 @@ def main():
     wifi_connected = connect_wifi()
     if wifi_connected:
         sync_time_with_ntp()
-    else:
-        display_text(MESSAGES["WIFI_RETRY"])
     
     # Start monitoring loop
     monitoring_loop()
