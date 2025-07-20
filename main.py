@@ -46,11 +46,13 @@ def monitoring_loop():
             # Decide whether to alert for an earthquake
             if earthquakes:
                 strongest = max(earthquakes, key=lambda eq: eq['magnitude'])
+
+                # Play tone alert if the earthquake is new
                 if strongest['unid'] != last_earthquake_unid:
                     play_tone_alert(strongest['magnitude'])
-                    last_earthquake_unid = strongest['unid']
-                    earthquake_to_display = strongest
-                # If same earthquake, earthquake_to_display remains None, showing ALL CLEAR
+                
+                last_earthquake_unid = strongest['unid']
+                earthquake_to_display = strongest
             else:
                 last_earthquake_unid = None  # Reset when no earthquakes are in range
             
