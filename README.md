@@ -11,6 +11,8 @@ This project turns an M5Stack Core S3 into a real-time earthquake monitor. It fe
     - Magnitude
     - Location name
     - Distance from your location
+    - Time of the event
+- **Audio Alerts**: Plays a tone when a new earthquake is detected.
 - **WiFi Connectivity**: Connects to your WiFi network to fetch data.
 - **Time Synchronization**: Syncs with an NTP server to ensure accurate time.
 - **Resilient**: Handles WiFi disconnection and API errors gracefully.
@@ -25,7 +27,7 @@ This project turns an M5Stack Core S3 into a real-time earthquake monitor. It fe
 ### Software
 
 - MicroPython for M5Stack Core S3
-- `requests` library for MicroPython
+- `urequests` library for MicroPython
 
 ## Setup
 
@@ -37,7 +39,12 @@ This project turns an M5Stack Core S3 into a real-time earthquake monitor. It fe
     cd terremoto
     ```
 
-3.  **Install libraries**: You will need to install the `requests` library. You can use `upip` for this.
+3.  **Install Libraries**:
+    This project requires the `urequests` library. You can install it on your M5Stack using `upip`:
+    ```python
+    import upip
+    upip.install('micropython-urequests')
+    ```
 
 4.  **Create `config.py`**:
     Copy the `config.template.py` file to `config.py`:
@@ -52,6 +59,7 @@ This project turns an M5Stack Core S3 into a real-time earthquake monitor. It fe
     - `MONITOR_LATITUDE`: Your latitude.
     - `MONITOR_LONGITUDE`: Your longitude.
     - `MONITOR_RADIUS_KM`: The radius (in km) around your location to monitor for earthquakes.
+    - `TIMEZONE_OFFSET_HOURS`: The hour difference from UTC for your local time.
     - You can also adjust other settings like the check interval, minimum magnitude, etc.
 
 ## Transferring Files to M5Stack
@@ -60,46 +68,62 @@ This project includes a `Makefile` to simplify the process of transferring your 
 
 1.  **Connect your M5Stack**: Plug your M5Stack Core S3 into your computer via USB.
 
-2.  **Find your device's serial port**: You may need to identify the correct serial port for your M5Stack. On macOS, it will likely be something like `/dev/tty.usbmodem...`, and on Linux, `/dev/ttyUSB0` or similar. You might need to edit the `Makefile` to specify the correct port.
+2.  **Find your device's serial port**: You may need to identify the correct serial port for your M5Stack. On macOS, it will likely be something like `/dev/tty.usbmodem...`, and on Linux, `/dev/ttyUSB0` or similar. You might need to edit the `Makefile` to specify the correct port (`AMPY_PORT`).
 
 3.  **Deploy the code**: Run the following command in your terminal:
     ```bash
     make deploy
     ```
     This command will:
-    - Check if `config.py` exists. If not, it will create one from the template.
-    - Copy `main.py` and `config.py` to your M5Stack.
+    - Check if `config.py` exists. If not, it will remind you to create one.
+    - Copy all `.py` files to your M5Stack.
     - Reset the device to start running the new code.
 
-    If you just want to connect to the device's REPL, you can run:
+    To connect to the device's REPL (Read-Eval-Print Loop), run:
     ```bash
     make connect
     ```
 
 ## Usage
 
-Once the setup is complete, you can run the `main.py` script on your M5Stack Core S3. The device will:
-1.  Initialize and display a startup message.
+Once the setup is complete and the files are deployed, the M5Stack will automatically run `main.py`. The device will:
+1.  Initialize and display a startup message with your monitoring settings.
 2.  Connect to your WiFi network.
 3.  Synchronize its time with an NTP server.
-4.  Start the monitoring loop:
+4.  Start the main monitoring loop:
     - Fetch earthquake data from the EMSC API.
-    - If an earthquake is detected within your radius, it will be displayed on the screen.
-    - If there are no earthquakes, it will show an "ALL CLEAR" message.
-    - The screen will update at the interval defined in `config.py`.
+    - If a new, significant earthquake is detected within your configured radius, it will display an alert and play a tone.
+    - If no earthquakes are found, it will show an "ALL CLEAR" message with a summary of worldwide events.
+    - The screen updates at the interval defined in `config.py`.
 
 ## File Descriptions
 
--   `main.py`: The main application script that orchestrates the monitoring loop.
--   `api.py`: Handles all interactions with the EMSC earthquake API.
--   `config.py`: Your local configuration (you need to create this from the template).
--   `config.template.py`: A template for the configuration file.
--   `device.py`: Contains functions for interacting with the M5Stack hardware (display, speaker).
--   `display.py`: Manages the display, including UI colors, message formats, and rendering functions.
--   `network_utils.py`: Provides functions for managing WiFi connectivity and NTP time synchronization.
--   `utils.py`: A collection of utility functions, such as time formatting.
+-   `main.py`: The main application script. It initializes the device, handles network connections, and runs the monitoring loop.
+-   `api.py`: Handles all interactions with the EMSC earthquake API, including building the request URL, fetching data, and parsing the response.
+-   `config.py`: Your local configuration file (not tracked by Git). You must create this from the template.
+-   `config.template.py`: A template for the configuration file, containing all available settings.
+-   `device.py`: Contains functions for interacting with the M5Stack hardware, such as initializing the screen and speaker.
+-   `display.py`: Manages what is shown on the M5Stack's screen, including message formatting, UI colors, and different display templates for alerts, info, and status messages.
+-   `network_utils.py`: Provides functions for managing WiFi connectivity (including reconnections) and NTP time synchronization.
+-   `utils.py`: A collection of utility functions, primarily for formatting timestamps into a human-readable format based on your local timezone.
 -   `LICENSE`: The project's license.
 -   `README.md`: This file.
+-   `Makefile`: Contains helper commands for deploying code to the device and connecting to its REPL.
+
+## Troubleshooting
+
+- **WiFi Connection Issues**:
+    - Double-check your `WIFI_SSID` and `WIFI_PASSWORD` in `config.py`.
+    - Ensure your M5Stack is within range of your WiFi router.
+    - The device will automatically try to reconnect if the connection is lost.
+
+- **API Errors**:
+    - The monitor will display a "CONNECTION ERROR" message if it cannot reach the EMSC API. This is often temporary.
+    - The device will continue to retry at the specified interval.
+
+- **Incorrect Time**:
+    - Ensure the `TIMEZONE_OFFSET_HOURS` in `config.py` is set correctly for your location.
+    - If the device fails to sync with the NTP server, it will display a warning. A successful time sync is required for accurate earthquake event times.
 
 ## Contributing
 
