@@ -29,15 +29,15 @@ except ImportError:
 # -- Message Formats --
 MESSAGES = {
     "STARTUP": "EARTHQUAKE MONITOR\n\nStarting...\n\nLat: {:.2f}\nLon: {:.2f}\nRadius: {}km",
+    "WIFI_CONNECTING_ATTEMPT": "WIFI\nCONNECTING\n\nAttempt {}/{}",
     "WIFI_LOST": "WIFI LOST\n\nReconnecting...",
     "WIFI_FAILED": "WIFI FAILED\n\nRetrying in\n{} minutes",
-    "SYNCING_TIME": "SYNCING TIME\n\nwith NTP...",
     "TIME_SYNCED": "TIME SYNCED\n\n{}",
     "NTP_FAILED": "NTP FAILED\n\nWill use\nlast known time",
     "CONNECTION_ERROR": "CONNECTION\nERROR\n\nRetrying WiFi\n\nLast check: {}",
     "ALL_CLEAR": "== ALL CLEAR ==\n\nNo earthquakes\nin {}km radius\n\nWorldwide {}m: {}\nLast check: {}",
     "EARTHQUAKE": "!!! EARTHQUAKE !!!\n\nMag: {:.1f}\n{}\nDist: {:.0f}km\n\nTime: {}",
-    "STOPPING": "STOPPING\n\nMonitor halted",
+    "STOPPING": "STOPPING...",
     "RUNTIME_ERROR": "RUNTIME ERROR\n\n{}\n\nRestarting loop...",
 }
 
@@ -95,6 +95,7 @@ def connect_wifi(max_retries=WIFI_MAX_RETRIES, retry_delay=WIFI_RETRY_DELAY):
     
     for attempt in range(max_retries):
         print("Connecting to WiFi (attempt {}/{})...".format(attempt + 1, max_retries))
+        display_text(MESSAGES["WIFI_CONNECTING_ATTEMPT"].format(attempt + 1, max_retries))
         wlan.connect(WIFI_SSID, WIFI_PASSWORD)
         
         # Wait for connection
@@ -289,7 +290,6 @@ def format_event_time(iso_timestamp):
 def sync_time_with_ntp():
     """Synchronize device time with NTP server"""
     print("Synchronizing time with NTP server...")
-    display_text(MESSAGES["SYNCING_TIME"])
     try:
         ntptime.settime()
         print("Time synchronized successfully")
@@ -370,8 +370,8 @@ def play_tone_alert(frequency=1000, duration=100, num_signals=1):
 def monitoring_loop():
     """Main monitoring loop"""
     last_earthquake_unid = None
-    try:
-        while True:
+    while True:
+        try:
             # Ensure WiFi connection
             if not ensure_wifi_connection():
                 continue
@@ -403,14 +403,15 @@ def monitoring_loop():
             # Wait for next check
             time.sleep(CHECK_INTERVAL_MINUTES * 60)
             
-    except KeyboardInterrupt:
-        display_text(MESSAGES["STOPPING"])
-    except Exception as e:
-        error_message = str(e)[:ERROR_MESSAGE_MAX_LENGTH]
-        print("Runtime error:", error_message)
-        display_text(MESSAGES["RUNTIME_ERROR"].format(error_message))
-        time.sleep(60) # Wait for 1 minute before restarting loop
-        monitoring_loop() # Restart the loop to recover
+        except KeyboardInterrupt:
+            display_text(MESSAGES["STOPPING"])
+            break
+        except Exception as e:
+            error_message = str(e)[:ERROR_MESSAGE_MAX_LENGTH]
+            print("Runtime error:", error_message)
+            display_text(MESSAGES["RUNTIME_ERROR"].format(error_message))
+            time.sleep(60) # Wait for 1 minute before restarting loop
+            continue # Restart the loop to recover
 
 def main():
     """Main function - orchestrates the earthquake monitoring system"""
