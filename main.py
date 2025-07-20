@@ -104,7 +104,7 @@ def connect_wifi(max_retries=WIFI_MAX_RETRIES, retry_delay=WIFI_RETRY_DELAY):
         try:
             wlan.disconnect()
         except Exception:
-            pass  # disconnect may raise if not connected; safe to ignore
+            pass
 
         wlan.connect(WIFI_SSID, WIFI_PASSWORD)
 
