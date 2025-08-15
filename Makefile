@@ -21,7 +21,7 @@ deploy:
 	@if [ ! -f config.py ]; then \
 		echo "Error: config.py not found. Creating from template..."; \
 		cp config.template.py config.py; \
-		echo "Please edit config.py with your WiFi credentials and coordinates"; \
+		echo "Please edit config.py with your WiFi credentials"; \
 		exit 1; \
 	fi
 	@echo "Looking for MicroPython device..."
@@ -34,7 +34,6 @@ deploy:
 	@echo "Using device: $(MP_DEVICE)"
 	mpremote connect $(MP_DEVICE) cp main.py :main.py
 	mpremote connect $(MP_DEVICE) cp config.py :config.py
-	mpremote connect $(MP_DEVICE) cp api.py :api.py
 	mpremote connect $(MP_DEVICE) cp device.py :device.py
 	mpremote connect $(MP_DEVICE) cp display.py :display.py
 	mpremote connect $(MP_DEVICE) cp network_utils.py :network_utils.py

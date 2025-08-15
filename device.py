@@ -44,40 +44,4 @@ def initialize_device():
         return True
     except Exception as e:
         print("Init error:", e)
-        return False
-
-def play_tone_alert(magnitude):
-    """Play a tone alert based on earthquake magnitude"""
-    try:
-        if is_do_not_disturb_time() and magnitude < 5.0:
-            print("In 'do not disturb' period. Alert silenced.")
-            return
-
-        if 1.0 <= magnitude < 2.0:
-            num_signals = 1
-            duration = 100  # Short beep
-        elif 2.0 <= magnitude < 3.0:
-            num_signals = 2
-            duration = 100  # Short beeps
-        elif 3.0 <= magnitude < 4.0:
-            num_signals = 3
-            duration = 100  # Short beeps
-        elif 4.0 <= magnitude < 5.0:
-            num_signals = 4
-            duration = 300  # Medium beeps
-        elif 5.0 <= magnitude < 6.0:
-            num_signals = 5
-            duration = 500  # Long beeps
-        elif magnitude >= 6.0:
-            num_signals = 10
-            duration = 500  # Long beeps
-        else:
-            return  # No sound for magnitudes below 1.0
-
-        frequency = 1000
-        for i in range(num_signals):
-            M5.Speaker.tone(frequency, duration)
-            if i < num_signals - 1:
-                time.sleep(0.8)
-    except Exception as e:
-        print("Speaker error:", e) 
+        return False 

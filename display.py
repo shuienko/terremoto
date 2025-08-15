@@ -1,47 +1,98 @@
 import M5
 import time
 from config import (
-    FONT, LINE_HEIGHT, MAX_LINES, MONITOR_LATITUDE, MONITOR_LONGITUDE,
-    MONITOR_RADIUS_KM, STARTUP_DISPLAY_DELAY, API_QUERY_PERIOD_MINUTES,
-    PLACE_NAME_MAX_LENGTH
+    FONT, LINE_HEIGHT, STARTUP_DISPLAY_DELAY, TIMEZONE_OFFSET_HOURS
 )
-from utils import format_event_time
 
 # -- UI Colors --
 COLOR_BLACK = 0x000000
 COLOR_WHITE = 0xFFFFFF
-COLOR_RED = 0xFF0000
-COLOR_DARK_RED = 0x8B0000
-COLOR_GREEN = 0x00FF00
-COLOR_DARK_GREEN = 0x006400
 COLOR_BLUE = 0x0000FF
 COLOR_DARK_BLUE = 0x00008B
-COLOR_YELLOW = 0xFFFF00
-COLOR_DARK_YELLOW = 0xCCCC00
 
 # -- Message Formats --
 MESSAGES = {
-    "STARTUP": "EARTHQUAKE MONITOR\n\nStarting...\n\nLat: {:.2f}\nLon: {:.2f}\nRadius: {}km",
-    "WIFI_CONNECTING_ATTEMPT": "WIFI\nCONNECTING\n\nAttempt {}/{}",
-    "WIFI_LOST": "WIFI LOST\n\nReconnecting...",
-    "WIFI_FAILED": "WIFI FAILED\n\nRetrying in\n{} minutes",
-    "TIME_SYNCED": "TIME SYNCED\n\n{}",
-    "NTP_FAILED": "NTP FAILED\n\nWill use\nlast known time",
-    "CONNECTION_ERROR": "CONNECTION\nERROR\n\nRetrying WiFi\n\nLast check: {}",
-    "ALL_CLEAR": "== ALL CLEAR ==\n\nNo earthquakes\nin {}km radius\n\nWorldwide {}m: {}\nLast check: {}",
-    "EARTHQUAKE": "!!! EARTHQUAKE !!!\n\nMag: {:.1f}\n{}\nDist: {:.0f}km\n\nTime: {}",
-    "STOPPING": "STOPPING...",
-    "RUNTIME_ERROR": "RUNTIME ERROR\n\n{}\n\nRestarting loop...",
+    "STARTUP": "SIMPLE CLOCK\n\nStarting...\n\nTimezone: UTC{:+d}",
 }
 
-def _display_template(text, title_bg_color):
-    """A template for displaying messages with a colored title bar."""
-    print("Display:", text)
+# Internal UI state to minimize redraw/flicker
+_UI_INITIALIZED = False
+_SCREEN_WIDTH = 0
+_SCREEN_HEIGHT = 0
+_TITLE_HEIGHT = 40
+_TIME_Y = 0
+_TIME_X = 0
+_MAX_TIME_WIDTH = 0
+_LAST_TIME_STR = None
+_TIME_AREA_HEIGHT = 90  # approximate height for DejaVu72; generous to fully clear
+
+
+def _init_clock_ui():
+    global _UI_INITIALIZED, _SCREEN_WIDTH, _SCREEN_HEIGHT, _TIME_Y, _TIME_X, _MAX_TIME_WIDTH
 
     try:
         M5.Lcd.clear(COLOR_BLACK)
 
-        lines = text.split('\n')
+        _SCREEN_WIDTH = M5.Display.width()
+        _SCREEN_HEIGHT = M5.Display.height()
+
+        # Draw static title bar once
+        M5.Lcd.fillRect(0, 0, _SCREEN_WIDTH, _TITLE_HEIGHT, COLOR_DARK_BLUE)
+        M5.Lcd.setFont(M5.Lcd.FONTS.DejaVu18)
+        M5.Lcd.setTextColor(COLOR_WHITE, COLOR_DARK_BLUE)
+        title = "= TIME NOW ="
+        title_width = M5.Lcd.textWidth(title)
+        M5.Lcd.drawString(title, (_SCREEN_WIDTH - title_width) // 2, (_TITLE_HEIGHT - 18) // 2)
+
+        # Prepare metrics for time rendering
+        M5.Lcd.setFont(M5.Lcd.FONTS.DejaVu72)
+        M5.Lcd.setTextColor(COLOR_WHITE, COLOR_BLACK)
+        _MAX_TIME_WIDTH = M5.Lcd.textWidth("88:88")  # widest likely HH:MM in proportional font
+        _TIME_X = (_SCREEN_WIDTH - _MAX_TIME_WIDTH) // 2  # stable centering independent of digits
+        _TIME_Y = (_SCREEN_HEIGHT + _TITLE_HEIGHT) // 2 - 36
+
+        _UI_INITIALIZED = True
+    except Exception as e:
+        print("LCD Init Error:", e)
+
+
+def display_clock(time_str):
+    """Display the current time in HH:MM format with minimal flicker"""
+    global _LAST_TIME_STR
+    print("Displaying time:", time_str)
+
+    try:
+        if not _UI_INITIALIZED:
+            _init_clock_ui()
+
+        # Avoid redundant redraws
+        if time_str == _LAST_TIME_STR:
+            return
+
+        # Clear only the time area using fixed max width to avoid leftovers when width shrinks
+        clear_y = max(_TITLE_HEIGHT, _TIME_Y - (_TIME_AREA_HEIGHT // 2))
+        M5.Lcd.fillRect(_TIME_X, clear_y, _MAX_TIME_WIDTH, _TIME_AREA_HEIGHT, COLOR_BLACK)
+
+        # Draw the time
+        M5.Lcd.setFont(M5.Lcd.FONTS.DejaVu72)
+        M5.Lcd.setTextColor(COLOR_WHITE, COLOR_BLACK)
+        M5.Lcd.drawString(time_str, _TIME_X, _TIME_Y)
+
+        _LAST_TIME_STR = time_str
+
+    except Exception as e:
+        print("LCD Error:", e)
+
+
+def show_startup_message():
+    """Display startup message"""
+    startup_msg = MESSAGES["STARTUP"].format(TIMEZONE_OFFSET_HOURS)
+    print("Display:", startup_msg)
+    
+    try:
+        M5.Lcd.clear(COLOR_BLACK)
+        
+        lines = startup_msg.split('\n')
         title = lines[0]
         body_text = "\n".join(lines[1:])
 
@@ -50,11 +101,11 @@ def _display_template(text, title_bg_color):
 
         # --- Draw Title Bar ---
         title_height = 30
-        M5.Lcd.fillRect(0, 0, screen_width, title_height, title_bg_color)
+        M5.Lcd.fillRect(0, 0, screen_width, title_height, COLOR_DARK_BLUE)
 
         # --- Draw Title Text ---
         M5.Lcd.setFont(M5.Lcd.FONTS.DejaVu18)
-        M5.Lcd.setTextColor(COLOR_WHITE, title_bg_color)
+        M5.Lcd.setTextColor(COLOR_WHITE, COLOR_DARK_BLUE)
         title_width = M5.Lcd.textWidth(title)
         M5.Lcd.drawString(title, (screen_width - title_width) // 2, (title_height - 18) // 2)
 
@@ -63,7 +114,7 @@ def _display_template(text, title_bg_color):
         M5.Lcd.setTextColor(COLOR_WHITE, COLOR_BLACK)
 
         body_lines = body_text.strip().split('\n')
-        max_lines = MAX_LINES
+        max_lines = 8
 
         line_height = LINE_HEIGHT
         total_text_height = min(len(body_lines), max_lines) * line_height
@@ -85,46 +136,4 @@ def _display_template(text, title_bg_color):
             y += line_height
 
     except Exception as e:
-        print("LCD Error:", e)
-
-def display_info(text):
-    _display_template(text, COLOR_DARK_BLUE)
-
-def display_success(text):
-    _display_template(text, COLOR_DARK_GREEN)
-
-def display_warning(text):
-    _display_template(text, COLOR_DARK_YELLOW)
-
-def display_error(text):
-    _display_template(text, COLOR_DARK_RED)
-
-def display_earthquake_alert(text):
-    _display_template(text, COLOR_RED)
-
-def show_startup_message():
-    """Display startup message with monitoring configuration"""
-    startup_msg = MESSAGES["STARTUP"].format(
-        MONITOR_LATITUDE, MONITOR_LONGITUDE, MONITOR_RADIUS_KM
-    )
-    display_info(startup_msg)
-    time.sleep(STARTUP_DISPLAY_DELAY)
-
-def format_earthquake_message(earthquake, total_found, check_timestamp):
-    """Format message based on earthquake data"""
-    if total_found == -1:
-        return MESSAGES["CONNECTION_ERROR"].format(check_timestamp), "warning"
-    elif not earthquake:
-        return MESSAGES["ALL_CLEAR"].format(
-            MONITOR_RADIUS_KM, API_QUERY_PERIOD_MINUTES, total_found, check_timestamp
-        ), "success"
-    else:
-        # Show the provided earthquake
-        place_short = earthquake['place'][:PLACE_NAME_MAX_LENGTH]
-        event_time_str = format_event_time(earthquake.get('timestamp', ''))
-        return MESSAGES["EARTHQUAKE"].format(
-            earthquake['magnitude'],
-            place_short,
-            earthquake['distance'],
-            event_time_str
-        ), "alert" 
+        print("LCD Error:", e) 

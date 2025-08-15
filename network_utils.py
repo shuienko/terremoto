@@ -8,15 +8,6 @@ from config import (
     WIFI_MAX_RETRIES,
     WIFI_RETRY_DELAY,
     WIFI_MAX_WAIT,
-    CHECK_INTERVAL_MINUTES
-)
-
-from display import (
-    display_info,
-    display_success,
-    display_warning,
-    display_error,
-    MESSAGES
 )
 
 from utils import format_time
@@ -35,7 +26,6 @@ def connect_wifi(max_retries=WIFI_MAX_RETRIES, retry_delay=WIFI_RETRY_DELAY):
 
     for attempt in range(max_retries):
         print("Connecting to WiFi (attempt {}/{})...".format(attempt + 1, max_retries))
-        display_info(MESSAGES["WIFI_CONNECTING_ATTEMPT"].format(attempt + 1, max_retries))
 
         # Ensure any previous connection attempt is stopped
         try:
@@ -78,12 +68,12 @@ def sync_time_with_ntp():
         ntptime.settime()
         print("Time synchronized successfully")
         current_time_str = format_time()
-        display_success(MESSAGES["TIME_SYNCED"].format(current_time_str))
+        print(f"Time synced: {current_time_str}")
         time.sleep(2)
         return True
     except Exception as e:
         print("NTP Error:", e)
-        display_warning(MESSAGES["NTP_FAILED"])
+        print("Will use last known time")
         time.sleep(2)
         return False
 
@@ -92,11 +82,10 @@ def ensure_wifi_connection():
     wlan = network.WLAN(network.STA_IF)
     if not wlan.isconnected():
         print("WiFi disconnected, attempting to reconnect...")
-        display_warning(MESSAGES["WIFI_LOST"])
+        print("WiFi lost - reconnecting...")
         wifi_connected = connect_wifi()
         if not wifi_connected:
-            display_error(MESSAGES["WIFI_FAILED"].format(CHECK_INTERVAL_MINUTES))
-            time.sleep(CHECK_INTERVAL_MINUTES * 60)
+            print("WiFi reconnection failed")
             return False
         # If reconnected, sync time
         sync_time_with_ntp()

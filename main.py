@@ -1,5 +1,5 @@
 """
-Terremoto - M5Stack Core S3 earthquake monitor
+Simple Clock - M5Stack Core S3
 MicroPython version for Core S3
 """
 
@@ -7,85 +7,51 @@ import time
 import gc
 
 from config import (
-    CHECK_INTERVAL_MINUTES,
-    ERROR_MESSAGE_MAX_LENGTH,
+    TIMEZONE_OFFSET_HOURS,
+    UPDATE_INTERVAL_SECONDS,
 )
 from display import (
-    display_info,
-    display_success,
-    display_warning,
-    display_error,
-    display_earthquake_alert,
-    MESSAGES,
+    display_clock,
     show_startup_message,
-    format_earthquake_message
 )
-from api import fetch_earthquakes
 from utils import format_time
-from device import initialize_device, play_tone_alert, set_display_brightness
+from device import initialize_device, set_display_brightness
 from network_utils import connect_wifi, sync_time_with_ntp, ensure_wifi_connection
 
-def monitoring_loop():
-    """Main monitoring loop"""
-    last_earthquake_unid = None
+def clock_loop():
+    """Main clock loop"""
     while True:
         try:
             # Set brightness
             set_display_brightness()
 
-            # Ensure WiFi connection
+            # Ensure WiFi connection for time sync
             if not ensure_wifi_connection():
-                continue
+                # If no WiFi, just show time without sync
+                pass
             
-            # Fetch earthquake data
-            earthquakes, total_found = fetch_earthquakes()
-            check_timestamp = format_time()
+            # Get current time
+            current_time = format_time()
             
-            earthquake_to_display = None
-            
-            # Decide whether to alert for an earthquake
-            if earthquakes:
-                strongest = max(earthquakes, key=lambda eq: eq['magnitude'])
-
-                # Play tone alert if the earthquake is new
-                if strongest['unid'] != last_earthquake_unid:
-                    play_tone_alert(strongest['magnitude'])
-                
-                last_earthquake_unid = strongest['unid']
-                earthquake_to_display = strongest
-            else:
-                last_earthquake_unid = None  # Reset when no earthquakes are in range
-            
-            # Format and display message
-            message, message_type = format_earthquake_message(earthquake_to_display, total_found, check_timestamp)
-            
-            if message_type == "alert":
-                display_earthquake_alert(message)
-            elif message_type == "success":
-                display_success(message)
-            elif message_type == "warning":
-                display_warning(message)
-            else:
-                display_info(message)
+            # Display clock
+            display_clock(current_time)
             
             # Clean up memory
             gc.collect()
             
-            # Wait for next check
-            time.sleep(CHECK_INTERVAL_MINUTES * 60)
+            # Wait for next update
+            time.sleep(UPDATE_INTERVAL_SECONDS)
             
         except KeyboardInterrupt:
-            display_info(MESSAGES["STOPPING"])
+            print("Stopping clock...")
             break
         except Exception as e:
-            error_message = str(e)[:ERROR_MESSAGE_MAX_LENGTH]
-            print("Runtime error:", error_message)
-            display_error(MESSAGES["RUNTIME_ERROR"].format(error_message))
-            time.sleep(60) # Wait for 1 minute before restarting loop
-            continue # Restart the loop to recover
+            print("Runtime error:", str(e))
+            time.sleep(10)  # Wait before restarting loop
+            continue
 
 def main():
-    """Main function - orchestrates the earthquake monitoring system"""
+    """Main function - orchestrates the clock system"""
     # Initialize device
     if not initialize_device():
         return
@@ -96,25 +62,16 @@ def main():
     # Show startup message
     show_startup_message()
     
-    # Initial WiFi connection
+    # Initial WiFi connection for time sync
     wifi_connected = connect_wifi()
-
-    # If the first attempt fails, show a message, wait, and retry once more before giving up.
-    if not wifi_connected:
-        display_error(MESSAGES["WIFI_FAILED"].format(CHECK_INTERVAL_MINUTES))
-        time.sleep(CHECK_INTERVAL_MINUTES * 60)
-        wifi_connected = connect_wifi()
 
     if wifi_connected:
         sync_time_with_ntp()
     else:
-        # Abort startup if we still have no network; avoids crashing later.
-        print("Startup aborted: unable to establish WiFi connection.")
-        display_error(MESSAGES["WIFI_FAILED"].format(CHECK_INTERVAL_MINUTES))
-        return
+        print("No WiFi connection - clock will run without time sync")
     
-    # Start monitoring loop
-    monitoring_loop()
+    # Start clock loop
+    clock_loop()
 
 # Run the main function
 if __name__ == "__main__":
