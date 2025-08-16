@@ -7,6 +7,7 @@ from config import (
 # -- UI Colors --
 COLOR_BLACK = 0x000000
 COLOR_WHITE = 0xFFFFFF
+COLOR_GREEN = 0x006400
 COLOR_BLUE = 0x0000FF
 COLOR_DARK_BLUE = 0x00008B
 
@@ -37,9 +38,9 @@ def _init_clock_ui():
         _SCREEN_HEIGHT = M5.Display.height()
 
         # Draw static title bar once
-        M5.Lcd.fillRect(0, 0, _SCREEN_WIDTH, _TITLE_HEIGHT, COLOR_DARK_BLUE)
+        M5.Lcd.fillRect(0, 0, _SCREEN_WIDTH, _TITLE_HEIGHT, COLOR_GREEN)
         M5.Lcd.setFont(M5.Lcd.FONTS.DejaVu18)
-        M5.Lcd.setTextColor(COLOR_WHITE, COLOR_DARK_BLUE)
+        M5.Lcd.setTextColor(COLOR_WHITE, COLOR_GREEN)
         title = "= TIME NOW ="
         title_width = M5.Lcd.textWidth(title)
         M5.Lcd.drawString(title, (_SCREEN_WIDTH - title_width) // 2, (_TITLE_HEIGHT - 18) // 2)
